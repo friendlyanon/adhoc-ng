@@ -1,0 +1,38 @@
+name: Continuous Integration
+
+on: push
+
+env:
+  VCPKG_COMMIT: "a0b1c8d3a477c1cb4813d8e127a56961707ca42b"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup MSVC
+      if: startsWith(matrix.os, 'windows-')
+      uses: eden-ci/msvc-dev-cmd@1bd71f95d6f3d1b2b3395b335cc63bcdc90cf223
+      with: { arch: amd64 }
+
+    - name: Setup GCC
+      if: startsWith(matrix.os, 'ubuntu-')
+      uses: egor-tensin/setup-gcc@v2
+      with: { version: "16" }
+
+    - name: Install vcpkg
+      uses: friendlyanon/setup-vcpkg@v1
+      with: { committish: "${{ env.VCPKG_COMMIT }}" }
+
+    - name: Configure
+      shell: pwsh
+      run: cmake "--preset=ci-$("${{ matrix.os }}".split("-")[0])"
+
+    - name: Build
+      run: cmake --build build

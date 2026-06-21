@@ -1,0 +1,13 @@
+{
+  "name": "adhoc-server-pro",
+  "version-date": "2026-06-21",
+  "dependencies": [
+    "boost-asio",
+    "boost-beast",
+    "boost-smart-ptr",
+    "ctre",
+    "fmt",
+    "scnlib",
+    "sqlite3"
+  ]
+}

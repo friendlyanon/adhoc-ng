@@ -1,0 +1,3 @@
+* eol=lf
+source/resource.rc eol=crlf
+source/utf8.xml eol=crlf

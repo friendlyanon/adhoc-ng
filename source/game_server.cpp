@@ -1,0 +1,117 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+#include <cstring>
+#include <memory>
+#include <string_view>
+#include <utility>
+
+#include "game_server.hpp"
+
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/system/error_code.hpp>
+#include <fmt/base.h>
+
+#include "registry.hpp"
+#include "session.hpp"
+
+using namespace std::string_view_literals;
+
+using boost::asio::awaitable;
+using boost::asio::redirect_error;
+using boost::asio::use_awaitable;
+using boost::asio::ip::tcp;
+using boost::asio::local::stream_protocol;
+using boost::system::error_code;
+
+namespace adhoc
+{
+
+awaitable<void> run_game_server(tcp::acceptor& acceptor, registry& reg)
+{
+  auto ec = error_code {};
+
+  while (acceptor.is_open()) {
+    auto socket =
+        co_await acceptor.async_accept(redirect_error(use_awaitable, ec));
+    if (ec) {
+      if (ec == boost::asio::error::operation_aborted) {
+        break;
+      }
+      continue;
+    }
+
+    auto ep_ec = error_code {};
+    let endpoint = socket.remote_endpoint(ep_ec);
+    if (ep_ec) {
+      socket.close(ep_ec);
+      continue;
+    }
+
+    let address = endpoint.address();
+    auto track = address.is_v4();
+    auto ip_be = std::uint32_t {};
+    auto host = std::uint32_t {};
+    auto label = std::string {};
+
+    if (track) {
+      let v4 = address.to_v4();
+      host = v4.to_uint();
+      let bytes = v4.to_bytes();
+      std::memcpy(&ip_be, bytes.data(), 4);
+      if (!reg.try_open_connection(v4, true)) {
+        socket.close(ep_ec);
+        continue;
+      }
+      label = v4.to_string();
+    } else {
+      if (!reg.try_open_connection_anonymous()) {
+        socket.close(ep_ec);
+        continue;
+      }
+      label = address.to_string();
+    }
+
+    let session =
+        std::make_shared<session_impl<tcp::socket>>(std::move(socket), reg);
+    session->tracks_address = track;
+    session->address_v4_host = host;
+    session->ip_be = ip_be;
+    session->peer_label = label;
+
+    fmt::println("New connection from {}", session->peer_label);
+    session->start();
+  }
+}
+
+awaitable<void> run_game_server(stream_protocol::acceptor& acceptor,
+                                registry& reg)
+{
+  auto ec = error_code {};
+
+  while (acceptor.is_open()) {
+    auto socket =
+        co_await acceptor.async_accept(redirect_error(use_awaitable, ec));
+    if (ec) {
+      if (ec == boost::asio::error::operation_aborted) {
+        break;
+      }
+      continue;
+    }
+
+    if (!reg.try_open_connection_anonymous()) {
+      auto close_ec = error_code {};
+      socket.close(close_ec);
+      continue;
+    }
+
+    let session = std::make_shared<session_impl<stream_protocol::socket>>(
+        std::move(socket), reg);
+    session->peer_label = "unix"sv;
+
+    fmt::println("New connection from {}", session->peer_label);
+    session->start();
+  }
+}
+
+}  // namespace adhoc
