@@ -214,7 +214,7 @@ class to_acceptor
 {
 public:
   explicit to_acceptor(boost::asio::io_context& io_context)
-      : io_context(&io_context)
+      : io_context_(&io_context)
   {
   }
 
@@ -229,7 +229,7 @@ public:
     }
 
     auto acceptor =
-        stream_protocol::acceptor {*io_context, socket.endpoint, REUSE_ADDRESS};
+        stream_protocol::acceptor {*io_context_, socket.endpoint, REUSE_ADDRESS};
     if (socket.perms) {
       auto ignore = std::error_code {};
       fs::permissions(path, *socket.perms, ignore);
@@ -240,13 +240,13 @@ public:
 
   result operator()(tcp::endpoint const& endpoint) const
   {
-    return tcp::acceptor {*io_context, endpoint};
+    return tcp::acceptor {*io_context_, endpoint};
   }
 
   result operator()(auto&&) const { return {}; }
 
 private:
-  boost::asio::io_context* io_context;
+  boost::asio::io_context* io_context_;
 };
 
 }  // namespace
@@ -266,7 +266,7 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
   auto maybe_enter_systemd_mode = false;
 #ifdef __linux__
   auto systemd_mode = false;
-  int systemd_fds = 0;
+  auto systemd_fds = 0;
   auto systemd_fd_list = std::array<int, 2> {{-1, -1}};
   maybe_enter_systemd_mode = args.size() == 1 && args[0] == "systemd"sv;
 
@@ -297,7 +297,7 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
       systemd_mode = true;
       constexpr int SD_LISTEN_FDS_START = 3;
       for (int i = 0; i != systemd_fds; ++i) {
-        systemd_fd_list[i] = SD_LISTEN_FDS_START + i;
+        systemd_fd_list[static_cast<std::size_t>(i)] = SD_LISTEN_FDS_START + i;
       }
     }
   }

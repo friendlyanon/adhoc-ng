@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21...3.30)
+cmake_minimum_required(VERSION 3.25...3.30)
 
 project(adhoc-ng CXX)
 
@@ -39,7 +39,7 @@ find_package(fmt REQUIRED)
 find_package(scn REQUIRED)
 find_path(SQLITE3_INCLUDE_DIR sqlite3.h REQUIRED)
 find_library(SQLITE3_LIBRARY sqlite3 REQUIRED)
-target_include_directories(adhoc-server-pro PRIVATE "${SQLITE3_INCLUDE_DIR}")
+target_include_directories(adhoc-server-pro SYSTEM PRIVATE "${SQLITE3_INCLUDE_DIR}")
 target_link_libraries(
     adhoc-server-pro
     PRIVATE ctre::ctre Boost::headers fmt::fmt scn::scn "${SQLITE3_LIBRARY}"

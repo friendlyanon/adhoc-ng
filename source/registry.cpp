@@ -168,9 +168,9 @@ bool registry::handle_login(user_session& session, login_packet_c2s const& pkt)
 
   let code = [&]
   {
-    auto code = pkt.game;
-    db_->apply_crosslink(code);
-    return code;
+    auto code_ = pkt.game;
+    db_->apply_crosslink(code_);
+    return code_;
   }();
   db_->record_unknown_product(code);
 
