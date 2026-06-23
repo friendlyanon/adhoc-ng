@@ -228,8 +228,8 @@ public:
       fs::remove(path, ignore);
     }
 
-    auto acceptor =
-        stream_protocol::acceptor {*io_context_, socket.endpoint, REUSE_ADDRESS};
+    auto acceptor = stream_protocol::acceptor {
+        *io_context_, socket.endpoint, REUSE_ADDRESS};
     if (socket.perms) {
       auto ignore = std::error_code {};
       fs::permissions(path, *socket.perms, ignore);
@@ -321,17 +321,19 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
     return parse_endpoint(args[1]);
   }();
 
-  let had_parsing_error = [&]
-  {
-    auto handler = handle_parsing_error {err_out, "server"sv};
-    auto result = false;
-    result = std::visit(handler, game_endpoint) || result;
-    handler.arg = "status"sv;
-    result = std::visit(handler, status_endpoint) || result;
-    return result;
-  }();
-  if (had_parsing_error) {
-    usage(program);
+  if (!maybe_enter_systemd_mode) {
+    let had_parsing_error = [&]
+    {
+      auto handler = handle_parsing_error {err_out, "server"sv};
+      auto result = false;
+      result = std::visit(handler, game_endpoint) || result;
+      handler.arg = "status"sv;
+      result = std::visit(handler, status_endpoint) || result;
+      return result;
+    }();
+    if (had_parsing_error) {
+      usage(program);
+    }
   }
 
   auto io_context = boost::asio::io_context {1};
@@ -340,38 +342,36 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
   auto game_acceptor = maybe_acceptor {};
   auto status_acceptor = maybe_acceptor {};
   if (systemd_mode) {
-    auto fd_to_acceptor = [&](int fd) -> maybe_acceptor
+    auto fd_to_acceptor = [&](int fd, let& endpoint) -> maybe_acceptor
     {
-      if (fd < 0) {
-        return {};
-      }
-
-      auto addr = sockaddr_storage {};
-      socklen_t len = sizeof(addr);
-      if (::getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len) != 0) {
-        throw std::runtime_error("getsockname failed for systemd socket");
-      }
-
-      if (addr.ss_family == AF_UNIX) {
-        auto acceptor = stream_protocol::acceptor {io_context};
-        acceptor.assign(stream_protocol(), fd);
-        return acceptor;
-      } else if (addr.ss_family == AF_INET || addr.ss_family == AF_INET6) {
-        auto acceptor = tcp::acceptor {io_context};
-        if (addr.ss_family == AF_INET) {
-          acceptor.assign(tcp::v4(), fd);
-        } else {
-          acceptor.assign(tcp::v6(), fd);
+      if (fd >= 0) {
+        auto addr = sockaddr_storage {};
+        socklen_t len = sizeof(addr);
+        if (::getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len) != 0) {
+          throw std::runtime_error("getsockname failed for systemd socket");
         }
-        return acceptor;
+
+        if (addr.ss_family == AF_UNIX) {
+          auto acceptor = stream_protocol::acceptor {io_context};
+          acceptor.assign(stream_protocol(), fd);
+          return acceptor;
+        } else if (addr.ss_family == AF_INET || addr.ss_family == AF_INET6) {
+          auto acceptor = tcp::acceptor {io_context};
+          if (addr.ss_family == AF_INET) {
+            acceptor.assign(tcp::v4(), fd);
+          } else {
+            acceptor.assign(tcp::v6(), fd);
+          }
+          return acceptor;
+        }
       }
 
-      return {};
+      return std::visit(acceptor_visitor, endpoint);
     };
 
-    game_acceptor = fd_to_acceptor(systemd_fd_list[0]);
+    game_acceptor = fd_to_acceptor(systemd_fd_list[0], game_endpoint);
     if (systemd_fds != 1) {
-      status_acceptor = fd_to_acceptor(systemd_fd_list[1]);
+      status_acceptor = fd_to_acceptor(systemd_fd_list[1], status_endpoint);
     }
   } else {
     game_acceptor = std::visit(acceptor_visitor, game_endpoint);
