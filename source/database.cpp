@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <stdexcept>
@@ -103,10 +104,9 @@ void product_db::apply_crosslink(product_code& code)
   if (sqlite3_step(stmt_ptr) == SQLITE_ROW) {
     let dst = cstr(sqlite3_column_text(stmt_ptr, 0));
     if (dst != nullptr) {
+      code = {};
       let n = bounded_strlen(dst, PRODUCT_CODE_LENGTH);
-      for (auto i = 0zu; i != PRODUCT_CODE_LENGTH; ++i) {
-        code.data[i] = (i < n) ? dst[i] : 0;
-      }
+      std::memcpy(code.data, dst, n);
       fmt::println("Crosslinked {} to {}", id, std::string_view(dst, n));
     }
   }
