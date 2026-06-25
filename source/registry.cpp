@@ -36,6 +36,15 @@ std::string_view nickname_str(nickname const& n)
   return {cstr(n.data), bounded_strlen(n.data, ADHOCCTL_NICKNAME_LEN)};
 }
 
+template<typename T>
+T data_from(let& view)
+{
+  auto t = T {};
+  let copy_len = std::min(view.size(), std::size(t.data));
+  std::memcpy(t.data, view.data(), copy_len);
+  return t;
+}
+
 bool valid_product_code(product_code const& code)
 {
   for (auto i = 0zu; i != PRODUCT_CODE_LENGTH; ++i) {
@@ -241,18 +250,12 @@ bool registry::handle_connect(user_session& session,
 
   // Notify existing peers + send peer info to the joining user.
   for (let peer : group->players) {
-    auto to_peer = connect_packet_s2c {};
-    to_peer.base.opcode = OPCODE_CONNECT;
-    to_peer.name = session.name;
-    to_peer.mac = session.mac;
-    to_peer.ip = session.ip_be;
+    let to_peer = connect_packet_s2c {
+        {OPCODE_CONNECT}, session.name, session.mac, session.ip_be};
     peer->send_bytes(packet_bytes(to_peer));
 
-    auto to_self = connect_packet_s2c {};
-    to_self.base.opcode = OPCODE_CONNECT;
-    to_self.name = peer->name;
-    to_self.mac = peer->mac;
-    to_self.ip = peer->ip_be;
+    let to_self = connect_packet_s2c {
+        {OPCODE_CONNECT}, peer->name, peer->mac, peer->ip_be};
     session.send_bytes(packet_bytes(to_self));
   }
 
@@ -276,9 +279,7 @@ void registry::leave_group(user_session& session)
   }
   vector_remove(group->players, &session);
 
-  auto pkt = disconnect_packet_s2c {};
-  pkt.base.opcode = OPCODE_DISCONNECT;
-  pkt.ip = session.ip_be;
+  let pkt = disconnect_packet_s2c {{OPCODE_DISCONNECT}, session.ip_be};
   for (let peer : group->players) {
     peer->send_bytes(packet_bytes(pkt));
   }
@@ -327,14 +328,10 @@ bool registry::handle_scan(user_session& session)
   }
 
   for (let& [group_key, group] : session.game->groups) {
-    auto pkt = scan_packet_s2c {};
-    pkt.base.opcode = OPCODE_SCAN;
-    std::memset(pkt.group.data, 0, ADHOCCTL_GROUPNAME_LEN);
-    std::memcpy(pkt.group.data,
-                group->name.data(),
-                std::min(group->name.size(), ADHOCCTL_GROUPNAME_LEN));
-    pkt.mac =
-        group->players.empty() ? session.mac : group->players.front()->mac;
+    let& p = group->players;
+    let mac = p.empty() ? session.mac : p.front()->mac;
+    let pkt = scan_packet_s2c {
+        {OPCODE_SCAN}, data_from<group_name>(group->name), mac};
     session.send_bytes(packet_bytes(pkt));
   }
 
@@ -361,12 +358,8 @@ bool registry::handle_chat(user_session& session, std::string_view message)
     return false;
   }
 
-  auto pkt = chat_packet_s2c {};
-  pkt.base.base.opcode = OPCODE_CHAT;
-  std::memset(pkt.base.message, 0, CHAT_MESSAGE_LEN);
-  let copy_len = std::min(message.size(), CHAT_MESSAGE_LEN - 1zu);
-  std::memcpy(pkt.base.message, message.data(), copy_len);
-  pkt.name = session.name;
+  let pkt = chat_packet_s2c  //
+      {{{OPCODE_CHAT}, data_from<chat_message>(message)}, session.name};
 
   auto recipients = 0zu;
   for (let peer : session.group->players) {
@@ -394,14 +387,8 @@ void registry::broadcast_shutdown()
   }
   shutdown_broadcasted_ = true;
 
-  auto pkt = chat_packet_s2c {};
-  pkt.base.base.opcode = OPCODE_CHAT;
-  std::memset(pkt.base.message, 0, CHAT_MESSAGE_LEN);
-  {
-    constexpr std::string_view msg = SERVER_SHUTDOWN_MESSAGE;
-    static_assert(msg.size() < CHAT_MESSAGE_LEN);
-    std::memcpy(pkt.base.message, msg.data(), msg.size());
-  }
+  let msg = std::string_view(SERVER_SHUTDOWN_MESSAGE);
+  let pkt = chat_packet_s2c {{{OPCODE_CHAT}, data_from<chat_message>(msg)}};
 
   for (let& [game_key, game] : games_) {
     for (let& [group_key, group] : game->groups) {
@@ -427,13 +414,11 @@ std::vector<status_user> registry::snapshot_for_status() const
   for (let& [game_key, game] : games_) {
     let& code = game->code_str;
     for (let session : game->users) {
-      auto u = status_user {};
-      u.name = nickname_str(session->name);
-      u.product_code = code;
-      if (session->group != nullptr) {
+      auto& u = out.emplace_back(
+          std::string(nickname_str(session->name)), code, std::nullopt);
+      if (session->group) {
         u.group = session->group->name;
       }
-      out.push_back(MOV(u));
     }
   }
   return out;

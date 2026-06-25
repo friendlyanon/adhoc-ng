@@ -62,6 +62,11 @@ struct product_code
   char data[PRODUCT_CODE_LENGTH];
 };
 
+struct chat_message
+{
+  char data[CHAT_MESSAGE_LEN];
+};
+
 struct packet_base
 {
   std::uint8_t opcode;
@@ -86,7 +91,7 @@ struct connect_packet_c2s
 struct chat_packet_c2s
 {
   packet_base base;
-  char message[CHAT_MESSAGE_LEN];
+  chat_message message;
 };
 
 // S2C

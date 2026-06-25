@@ -173,9 +173,9 @@ awaitable<void> session_impl<Socket>::reader()
             auto pkt = chat_packet_c2s {};
             std::memcpy(&pkt, rx_, sizeof(pkt));
             consume_rx(sizeof(pkt));
-            let mlen = bounded_strlen(pkt.message, CHAT_MESSAGE_LEN);
-            if (!registry_->handle_chat(*this,
-                                        std::string_view(pkt.message, mlen)))
+            let mlen = bounded_strlen(pkt.message.data, CHAT_MESSAGE_LEN);
+            if (!registry_->handle_chat(
+                    *this, std::string_view(pkt.message.data, mlen)))
             {
               close();
             }
