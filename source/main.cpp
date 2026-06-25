@@ -13,7 +13,6 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <utility>
 #include <variant>
 #include <vector>
 
@@ -33,6 +32,7 @@
 #include <scn/scan.h>
 
 #include "database.hpp"
+#include "fwd_mov.hpp"
 #include "game_server.hpp"
 #include "registry.hpp"
 #include "status_server.hpp"
@@ -389,14 +389,14 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
   {
     auto coro = [&]() -> awaitable<void>
     { co_await adhoc::run_game_server(acceptor, reg); };
-    co_spawn(io_context, std::move(coro), detached);
+    co_spawn(io_context, MOV(coro), detached);
   };
 
   let spawn_status = [&](auto& acceptor)
   {
     auto coro = [&]() -> awaitable<void>
     { co_await adhoc::run_status_server(acceptor, reg); };
-    co_spawn(io_context, std::move(coro), detached);
+    co_spawn(io_context, MOV(coro), detached);
   };
 
   let describe_endpoint = [](let& acceptor, fmt::memory_buffer& buf) -> void
@@ -468,9 +468,9 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
     drain_timer->expires_after(std::chrono::milliseconds(250));
     auto on_drained = [&io_context, drain_timer](error_code const&)
     { io_context.stop(); };
-    drain_timer->async_wait(std::move(on_drained));
+    drain_timer->async_wait(MOV(on_drained));
   };
-  signals.async_wait(std::move(on_stop_signal));
+  signals.async_wait(MOV(on_stop_signal));
 
   io_context.run();
   return 0;

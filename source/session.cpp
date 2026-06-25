@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <cstring>
 #include <string_view>
-#include <utility>
 
 #include "session.hpp"
 
@@ -16,6 +15,7 @@
 #include <boost/asio/write.hpp>
 #include <boost/system/error_code.hpp>
 
+#include "fwd_mov.hpp"
 #include "registry.hpp"
 
 using boost::asio::awaitable;
@@ -30,7 +30,7 @@ namespace adhoc
 
 template<class Socket>
 session_impl<Socket>::session_impl(Socket socket, registry& reg)
-    : socket_(std::move(socket))
+    : socket_(MOV(socket))
     , timer_(socket_.get_executor())
     , write_signal_(socket_.get_executor())
     , registry_(&reg)
@@ -49,9 +49,9 @@ void session_impl<Socket>::start()
   auto run_writer = [self]() -> awaitable<void> { co_await self->writer(); };
   auto run_watchdog = [self]() -> awaitable<void> { co_await self->watchdog(); };
 
-  co_spawn(executor, std::move(run_reader), detached);
-  co_spawn(executor, std::move(run_writer), detached);
-  co_spawn(executor, std::move(run_watchdog), detached);
+  co_spawn(executor, MOV(run_reader), detached);
+  co_spawn(executor, MOV(run_writer), detached);
+  co_spawn(executor, MOV(run_watchdog), detached);
 }
 
 template<class Socket>
@@ -60,7 +60,7 @@ void session_impl<Socket>::send_bytes(std::vector<std::byte> bytes)
   if (closed_ || bytes.empty()) {
     return;
   }
-  write_queue_.push_back(std::move(bytes));
+  write_queue_.push_back(MOV(bytes));
   write_signal_.cancel_one();
 }
 
@@ -206,7 +206,7 @@ awaitable<void> session_impl<Socket>::writer()
       continue;
     }
 
-    let bytes = std::move(write_queue_.front());
+    let bytes = MOV(write_queue_.front());
     write_queue_.pop_front();
 
     co_await boost::asio::async_write(

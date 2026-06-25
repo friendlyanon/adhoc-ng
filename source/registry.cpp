@@ -10,6 +10,7 @@
 #include <fmt/base.h>
 
 #include "database.hpp"
+#include "fwd_mov.hpp"
 #include "session.hpp"
 
 using namespace std::string_view_literals;
@@ -182,7 +183,7 @@ bool registry::handle_login(user_session& session, login_packet_c2s const& pkt)
     node->code = code;
     node->code_str = key;
     game = node.get();
-    games_.emplace(key, std::move(node));
+    games_.emplace(key, MOV(node));
   } else {
     game = it->second.get();
   }
@@ -228,7 +229,7 @@ bool registry::handle_connect(user_session& session,
     node->name = key;
     node->game = session.game;
     group = node.get();
-    session.game->groups.emplace(key, std::move(node));
+    session.game->groups.emplace(key, MOV(node));
   } else {
     group = it->second.get();
   }
@@ -432,7 +433,7 @@ std::vector<status_user> registry::snapshot_for_status() const
       if (session->group != nullptr) {
         u.group = session->group->name;
       }
-      out.push_back(std::move(u));
+      out.push_back(MOV(u));
     }
   }
   return out;

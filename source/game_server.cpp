@@ -3,7 +3,6 @@
 #include <cstring>
 #include <memory>
 #include <string_view>
-#include <utility>
 
 #include "game_server.hpp"
 
@@ -12,6 +11,7 @@
 #include <boost/system/error_code.hpp>
 #include <fmt/base.h>
 
+#include "fwd_mov.hpp"
 #include "registry.hpp"
 #include "session.hpp"
 
@@ -73,12 +73,12 @@ awaitable<void> run_game_server(tcp::acceptor& acceptor, registry& reg)
     }
 
     using Session = session_impl<tcp::socket>;
-    let session_ptr = std::make_shared<Session>(std::move(socket), reg);
+    let session_ptr = std::make_shared<Session>(MOV(socket), reg);
     let session = session_ptr.get();
     session->tracks_address = track;
     session->address_v4_host = host;
     session->ip_be = ip_be;
-    session->peer_label = std::move(label);
+    session->peer_label = MOV(label);
 
     fmt::println("New connection from {}", session->peer_label);
     session->start();
@@ -107,7 +107,7 @@ awaitable<void> run_game_server(stream_protocol::acceptor& acceptor,
     }
 
     using Session = session_impl<stream_protocol::socket>;
-    let session_ptr = std::make_shared<Session>(std::move(socket), reg);
+    let session_ptr = std::make_shared<Session>(MOV(socket), reg);
     let session = session_ptr.get();
     session->peer_label = "unix"sv;
 

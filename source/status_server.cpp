@@ -3,7 +3,6 @@
 #include <cstdio>
 #include <memory>
 #include <string>
-#include <utility>
 
 #include "status_server.hpp"
 
@@ -17,6 +16,7 @@
 #include <fmt/format.h>
 
 #include "database.hpp"
+#include "fwd_mov.hpp"
 #include "registry.hpp"
 
 using namespace std::string_view_literals;
@@ -168,9 +168,9 @@ awaitable<void> run_status_server_generic(Acceptor& acceptor, registry& reg)
       continue;
     }
 
-    auto handler = [s = std::move(socket), &reg]() mutable -> awaitable<void>
-    { co_await handle_status_connection<socket_type>(std::move(s), reg); };
-    co_spawn(acceptor.get_executor(), std::move(handler), detached);
+    auto handler = [s = MOV(socket), &reg]() mutable -> awaitable<void>
+    { co_await handle_status_connection<socket_type>(MOV(s), reg); };
+    co_spawn(acceptor.get_executor(), MOV(handler), detached);
   }
 }
 
