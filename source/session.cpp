@@ -45,13 +45,13 @@ void session_impl<Socket>::start()
   let self = this->shared_from_this();
   let executor = socket_.get_executor();
 
-  auto run_reader = [self]() -> awaitable<void> { co_await self->reader(); };
-  auto run_writer = [self]() -> awaitable<void> { co_await self->writer(); };
-  auto run_watchdog = [self]() -> awaitable<void> { co_await self->watchdog(); };
+  auto reader_ = [self]() -> awaitable<void> { co_await self->reader(); };
+  auto writer_ = [self]() -> awaitable<void> { co_await self->writer(); };
+  auto watchdog_ = [self]() -> awaitable<void> { co_await self->watchdog(); };
 
-  co_spawn(executor, MOV(run_reader), detached);
-  co_spawn(executor, MOV(run_writer), detached);
-  co_spawn(executor, MOV(run_watchdog), detached);
+  co_spawn(executor, MOV(reader_), detached);
+  co_spawn(executor, MOV(writer_), detached);
+  co_spawn(executor, MOV(watchdog_), detached);
 }
 
 template<class Socket>
