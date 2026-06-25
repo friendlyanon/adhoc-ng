@@ -147,7 +147,7 @@ void product_db::record_unknown_product(product_code const& code)
     }
   }
 
-  let ins = "SELECT 1 FROM productids WHERE id = ?;";
+  let ins = "INSERT INTO productids (id, name) VALUES (?, ?);";
   if (sqlite3_prepare_v2(db_, ins, -1, out_ptr(stmt), nullptr) == SQLITE_OK) {
     let stmt_ptr = stmt.get();
     sqlite3_bind_text(stmt_ptr, 1, id_cstr, -1, SQLITE_STATIC);
