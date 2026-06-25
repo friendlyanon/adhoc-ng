@@ -19,8 +19,6 @@ set_property(TARGET adhoc-server-pro PROPERTY CXX_SCAN_FOR_MODULES OFF)
 target_compile_definitions(
     adhoc-server-pro PRIVATE
     let=auto\ const
-    BOOST_ASIO_DISABLE_SOURCE_LOCATION=1
-    BOOST_ASIO_DISABLE_ERROR_LOCATION=1
     "REUSE_ADDRESS=\$<NOT:\$<BOOL:${WIN32}>>"
 )
 if(WIN32)
