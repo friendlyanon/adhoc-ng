@@ -342,7 +342,7 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
   auto game_acceptor = maybe_acceptor {};
   auto status_acceptor = maybe_acceptor {};
   if (systemd_mode) {
-    auto fd_to_acceptor = [&](int fd, let& endpoint) -> maybe_acceptor
+    let fd_to_acceptor = [&](int fd, let& endpoint) -> maybe_acceptor
     {
       if (fd >= 0) {
         auto addr = sockaddr_storage {};
@@ -387,16 +387,16 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
 
   let spawn_game = [&](auto& acceptor)
   {
-    let coro = [&]() -> awaitable<void>
+    auto coro = [&]() -> awaitable<void>
     { co_await adhoc::run_game_server(acceptor, reg); };
-    co_spawn(io_context, coro, detached);
+    co_spawn(io_context, std::move(coro), detached);
   };
 
   let spawn_status = [&](auto& acceptor)
   {
-    let coro = [&]() -> awaitable<void>
+    auto coro = [&]() -> awaitable<void>
     { co_await adhoc::run_status_server(acceptor, reg); };
-    co_spawn(io_context, coro, detached);
+    co_spawn(io_context, std::move(coro), detached);
   };
 
   let describe_endpoint = [](let& acceptor, fmt::memory_buffer& buf) -> void
@@ -458,7 +458,7 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
     }
   };
 
-  let on_stop_signal = [&](error_code const&, int) -> void
+  auto on_stop_signal = [&](error_code const&, int) -> void
   {
     fmt::println("Received stop signal, shutting down");
     reg.broadcast_shutdown();
@@ -466,11 +466,11 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
     std::visit(close_acceptor, status_acceptor);
     let drain_timer = std::make_shared<boost::asio::steady_timer>(io_context);
     drain_timer->expires_after(std::chrono::milliseconds(250));
-    let on_drained = [&io_context, drain_timer](error_code const&)
+    auto on_drained = [&io_context, drain_timer](error_code const&)
     { io_context.stop(); };
-    drain_timer->async_wait(on_drained);
+    drain_timer->async_wait(std::move(on_drained));
   };
-  signals.async_wait(on_stop_signal);
+  signals.async_wait(std::move(on_stop_signal));
 
   io_context.run();
   return 0;

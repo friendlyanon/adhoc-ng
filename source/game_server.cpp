@@ -78,7 +78,7 @@ awaitable<void> run_game_server(tcp::acceptor& acceptor, registry& reg)
     session->tracks_address = track;
     session->address_v4_host = host;
     session->ip_be = ip_be;
-    session->peer_label = label;
+    session->peer_label = std::move(label);
 
     fmt::println("New connection from {}", session->peer_label);
     session->start();
