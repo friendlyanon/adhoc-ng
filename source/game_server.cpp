@@ -72,8 +72,9 @@ awaitable<void> run_game_server(tcp::acceptor& acceptor, registry& reg)
       label = address.to_string();
     }
 
-    let session =
-        std::make_shared<session_impl<tcp::socket>>(std::move(socket), reg);
+    using Session = session_impl<tcp::socket>;
+    let session_ptr = std::make_shared<Session>(std::move(socket), reg);
+    let session = session_ptr.get();
     session->tracks_address = track;
     session->address_v4_host = host;
     session->ip_be = ip_be;
@@ -105,8 +106,9 @@ awaitable<void> run_game_server(stream_protocol::acceptor& acceptor,
       continue;
     }
 
-    let session = std::make_shared<session_impl<stream_protocol::socket>>(
-        std::move(socket), reg);
+    using Session = session_impl<stream_protocol::socket>;
+    let session_ptr = std::make_shared<Session>(std::move(socket), reg);
+    let session = session_ptr.get();
     session->peer_label = "unix"sv;
 
     fmt::println("New connection from {}", session->peer_label);
