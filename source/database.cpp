@@ -55,9 +55,8 @@ product_db::product_db()
   if (sqlite3_open_v2(path, &db_, SQLITE_OPEN_READWRITE, nullptr) != SQLITE_OK)
   {
     let msg = db_ ? sqlite3_errmsg(db_) : "unknown error";
-    if (db_ != nullptr) {
-      sqlite3_close(db_);
-      db_ = nullptr;
+    if (let db = std::exchange(db_, nullptr); db != nullptr) {
+      sqlite3_close(db);
     }
     throw std::runtime_error(
         fmt::format("Failed to open database '{}': {}", path, msg));

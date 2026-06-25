@@ -4,6 +4,7 @@
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "registry.hpp"
 
@@ -144,13 +145,12 @@ void registry::close_connection(user_session& session)
   }
 
   if (session.game != nullptr) {
-    let game = session.game;
+    let game = std::exchange(session.game, nullptr);
     vector_remove(game->users, &session);
     fmt::println("{} ({}) stopped playing {}",
                  nickname_str(session.name),
                  session.peer_label,
                  game->code_str);
-    session.game = nullptr;
     destroy_game_if_empty(game);
   } else {
     fmt::println("Dropped connection to {}", session.peer_label);
@@ -273,7 +273,7 @@ bool registry::handle_connect(user_session& session,
 
 void registry::leave_group(user_session& session)
 {
-  let group = session.group;
+  let group = std::exchange(session.group, nullptr);
   if (group == nullptr) {
     return;
   }
@@ -297,7 +297,6 @@ void registry::leave_group(user_session& session)
       session.game->groups.erase(group->name);
     }
   }
-  session.group = nullptr;
 }
 
 bool registry::handle_disconnect(user_session& session)
