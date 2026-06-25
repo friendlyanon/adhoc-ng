@@ -22,7 +22,7 @@ namespace adhoc
 namespace
 {
 
-std::string_view product_code_from(product_code const& c)
+std::string_view product_code_str(product_code const& c)
 {
   return {c.data, bounded_strlen(c.data, PRODUCT_CODE_LENGTH)};
 }
@@ -184,7 +184,7 @@ bool registry::handle_login(user_session& session, login_packet_c2s const& pkt)
   }();
   db_->record_unknown_product(code);
 
-  let key = product_code_from(code);
+  let key = product_code_str(code);
   let it = games_.find(key);
   game_node* game = nullptr;
   if (it == games_.end()) {

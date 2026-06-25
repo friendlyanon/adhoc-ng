@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
@@ -15,6 +16,7 @@
 #include <sqlite3.h>
 
 using namespace std::string_literals;
+using namespace std::string_view_literals;
 
 using std::out_ptr;
 
@@ -24,12 +26,40 @@ namespace adhoc
 namespace
 {
 
-std::string product_code_to_string(product_code const& code)
+std::string_view product_code_str(product_code const& code)
 {
-  return std::string(code.data, bounded_strlen(code.data, PRODUCT_CODE_LENGTH));
+  return {code.data, bounded_strlen(code.data, PRODUCT_CODE_LENGTH)};
 }
 
-char const path[] = "database.db";
+bool ckd_(int actual, int expected, int line)
+{
+  if (actual != expected) {
+    switch (((expected == SQLITE_ROW) << 3) | ((expected == SQLITE_DONE) << 2)
+            | ((actual == SQLITE_ROW) << 1) | (actual == SQLITE_DONE))
+    {
+      case 0b1001:
+      case 0b0110:
+        return false;
+    }
+
+    let err = sqlite3_errstr(actual);
+    let msg = err ? err : "unknown error";
+    throw std::runtime_error(
+        fmt::format("SQLite operation failed on line {}: {}", line, msg));
+  }
+
+  return true;
+}
+
+void bind_(sqlite3_stmt* stmt, int index, std::string_view str, int line)
+{
+  let ret = sqlite3_bind_text(
+      stmt, index, str.data(), static_cast<int>(str.size()), SQLITE_STATIC);
+  (void)ckd_(ret, SQLITE_OK, line);
+}
+
+#define ckd(actual, expected) (ckd_((actual), (expected), __LINE__))
+#define bind(...) (bind_(__VA_ARGS__, __LINE__))
 
 struct statement_deleter
 {
@@ -42,6 +72,19 @@ struct statement_deleter
 };
 
 using statement_ptr = std::unique_ptr<sqlite3_stmt, statement_deleter>;
+
+statement_ptr prepare_(sqlite3* db, std::string_view sql, int line)
+{
+  auto stmt = statement_ptr {};
+  let ret = sqlite3_prepare_v2(
+      db, sql.data(), static_cast<int>(sql.size()), out_ptr(stmt), nullptr);
+  (void)ckd_(ret, SQLITE_OK, line);
+  return stmt;
+}
+
+#define prepare(sql) (prepare_(db_, (sql), __LINE__))
+
+char const path[] = "database.db";
 
 }  // namespace
 
@@ -92,67 +135,54 @@ product_db::~product_db()
 
 void product_db::apply_crosslink(product_code& code)
 {
-  let sql = "SELECT id_to FROM crosslinks WHERE id_from = ?;";
-  auto stmt = statement_ptr {};
-  if (sqlite3_prepare_v2(db_, sql, -1, out_ptr(stmt), nullptr) != SQLITE_OK) {
-    return;
-  }
-
-  let id = product_code_to_string(code);
+  let id = product_code_str(code);
+  let stmt = prepare("SELECT id_to FROM crosslinks WHERE id_from = ?;"sv);
   let stmt_ptr = stmt.get();
-  sqlite3_bind_text(stmt_ptr, 1, id.c_str(), -1, SQLITE_STATIC);
-  if (sqlite3_step(stmt_ptr) == SQLITE_ROW) {
-    let dst = cstr(sqlite3_column_text(stmt_ptr, 0));
-    if (dst != nullptr) {
-      code = {};
-      let n = bounded_strlen(dst, PRODUCT_CODE_LENGTH);
-      std::memcpy(code.data, dst, n);
-      fmt::println("Crosslinked {} to {}", id, std::string_view(dst, n));
-    }
+  bind(stmt_ptr, 1, id);
+  (void)ckd(sqlite3_step(stmt_ptr), SQLITE_ROW);
+  if (let dst = cstr(sqlite3_column_text(stmt_ptr, 0)); dst != nullptr) {
+    code = {};
+    let bytes = sqlite3_column_bytes(stmt_ptr, 0);
+    let n = std::min(static_cast<std::size_t>(bytes), PRODUCT_CODE_LENGTH);
+    std::memcpy(code.data, dst, n);
+    fmt::println("Crosslinked {} to {}", id, std::string_view(dst, n));
   }
 }
 
 std::string product_db::display_name_for(product_code const& code)
 {
-  let id = product_code_to_string(code);
-
-  let sql = "SELECT name FROM productids WHERE id = ?;";
-  auto stmt = statement_ptr {};
-  if (sqlite3_prepare_v2(db_, sql, -1, out_ptr(stmt), nullptr) == SQLITE_OK) {
-    let stmt_ptr = stmt.get();
-    sqlite3_bind_text(stmt_ptr, 1, id.c_str(), -1, SQLITE_STATIC);
-    if (sqlite3_step(stmt_ptr) == SQLITE_ROW) {
-      let name = cstr(sqlite3_column_text(stmt_ptr, 0));
-      if (name != nullptr) {
-        let n = sqlite3_column_bytes(stmt_ptr, 0);
-        return {name, static_cast<std::size_t>(n)};
-      }
-    }
+  let id = product_code_str(code);
+  let stmt = prepare("SELECT name FROM productids WHERE id = ?;"sv);
+  let stmt_ptr = stmt.get();
+  bind(stmt_ptr, 1, id);
+  (void)ckd(sqlite3_step(stmt_ptr), SQLITE_ROW);
+  if (let name = cstr(sqlite3_column_text(stmt_ptr, 0)); name != nullptr) {
+    let n = sqlite3_column_bytes(stmt_ptr, 0);
+    return {name, static_cast<std::size_t>(n)};
   }
-  return id;
+
+  return std::string(id);
 }
 
 void product_db::record_unknown_product(product_code const& code)
 {
-  let id = product_code_to_string(code);
-  let id_cstr = id.c_str();
+  let id = product_code_str(code);
 
-  let sql = "SELECT 1 FROM productids WHERE id = ?;";
-  auto stmt = statement_ptr {};
-  if (sqlite3_prepare_v2(db_, sql, -1, out_ptr(stmt), nullptr) == SQLITE_OK) {
+  {
+    let stmt = prepare("SELECT 1 FROM productids WHERE id = ?;"sv);
     let stmt_ptr = stmt.get();
-    sqlite3_bind_text(stmt_ptr, 1, id_cstr, -1, SQLITE_STATIC);
-    if (sqlite3_step(stmt_ptr) == SQLITE_ROW) {
+    bind(stmt_ptr, 1, id);
+    if (ckd(sqlite3_step(stmt_ptr), SQLITE_ROW)) {
       return;
     }
   }
 
-  let ins = "INSERT INTO productids (id, name) VALUES (?, ?);";
-  if (sqlite3_prepare_v2(db_, ins, -1, out_ptr(stmt), nullptr) == SQLITE_OK) {
+  {
+    let stmt = prepare("INSERT INTO productids (id, name) VALUES (?, ?);"sv);
     let stmt_ptr = stmt.get();
-    sqlite3_bind_text(stmt_ptr, 1, id_cstr, -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt_ptr, 2, id_cstr, -1, SQLITE_STATIC);
-    if (sqlite3_step(stmt_ptr) == SQLITE_DONE) {
+    bind(stmt_ptr, 1, id);
+    bind(stmt_ptr, 2, id);
+    if (ckd(sqlite3_step(stmt_ptr), SQLITE_DONE)) {
       fmt::println("Added unknown product id {} to database", id);
     }
   }
