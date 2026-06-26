@@ -42,8 +42,7 @@ bool ckd_(sqlite3* db, int actual, int expected, int line)
         return false;
     }
 
-    let err = sqlite3_errmsg(db);
-    let msg = err ? std::string_view(err) : "unknown error"sv;
+    let msg = sqlite3_errmsg(db);
     throw std::runtime_error(
         fmt::format("SQLite operation failed on line {}: {}", line, msg));
   }
@@ -100,10 +99,7 @@ product_db::product_db()
   if (let ret = sqlite3_open_v2(path, &db_, SQLITE_OPEN_READWRITE, nullptr);
       ret != SQLITE_OK)
   {
-    auto msg = std::string(db_ ? sqlite3_errmsg(db_) : sqlite3_errstr(ret));
-    if (msg.empty()) {
-      msg += "unknown error"sv;
-    }
+    let msg = std::string(db_ ? sqlite3_errmsg(db_) : sqlite3_errstr(ret));
     if (let db = std::exchange(db_, nullptr)) {
       sqlite3_close(db);
     }
@@ -122,8 +118,7 @@ product_db::product_db()
       ");";
 
   if (sqlite3_exec(db_, schema, nullptr, nullptr, nullptr) != SQLITE_OK) {
-    let err = sqlite3_errmsg(db_);
-    let msg = err ? err : "unknown error"s;
+    let msg = std::string(sqlite3_errmsg(db_));
     sqlite3_close(std::exchange(db_, nullptr));
     throw std::runtime_error(
         fmt::format("Failed to initialize database schema: {}", msg));
