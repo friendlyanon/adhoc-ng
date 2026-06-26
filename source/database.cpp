@@ -31,7 +31,7 @@ std::string_view product_code_str(product_code const& code)
   return {code.data, bounded_strlen(code.data, PRODUCT_CODE_LENGTH)};
 }
 
-bool ckd_(int actual, int expected, int line)
+bool ckd_(sqlite3* db, int actual, int expected, int line)
 {
   if (actual != expected) {
     switch (((expected == SQLITE_ROW) << 3) | ((expected == SQLITE_DONE) << 2)
@@ -42,8 +42,8 @@ bool ckd_(int actual, int expected, int line)
         return false;
     }
 
-    let err = sqlite3_errstr(actual);
-    let msg = err ? err : "unknown error";
+    let err = sqlite3_errmsg(db);
+    let msg = err ? std::string_view(err) : "unknown error"sv;
     throw std::runtime_error(
         fmt::format("SQLite operation failed on line {}: {}", line, msg));
   }
@@ -51,15 +51,16 @@ bool ckd_(int actual, int expected, int line)
   return true;
 }
 
-void bind_(sqlite3_stmt* stmt, int index, std::string_view str, int line)
+void bind_(
+    sqlite3* db, sqlite3_stmt* stmt, int index, std::string_view str, int line)
 {
   let ret = sqlite3_bind_text(
       stmt, index, str.data(), static_cast<int>(str.size()), SQLITE_STATIC);
-  (void)ckd_(ret, SQLITE_OK, line);
+  (void)ckd_(db, ret, SQLITE_OK, line);
 }
 
-#define ckd(actual, expected) (ckd_((actual), (expected), __LINE__))
-#define bind(...) (bind_(__VA_ARGS__, __LINE__))
+#define ckd(actual, expected) (ckd_(db_, (actual), (expected), __LINE__))
+#define bind(...) (bind_(db_, __VA_ARGS__, __LINE__))
 
 struct statement_deleter
 {
@@ -78,7 +79,7 @@ statement_ptr prepare_(sqlite3* db, std::string_view sql, int line)
   auto stmt = statement_ptr {};
   let ret = sqlite3_prepare_v2(
       db, sql.data(), static_cast<int>(sql.size()), out_ptr(stmt), nullptr);
-  (void)ckd_(ret, SQLITE_OK, line);
+  (void)ckd_(db, ret, SQLITE_OK, line);
   return stmt;
 }
 
@@ -96,10 +97,14 @@ product_db::product_db()
     return;
   }
 
-  if (sqlite3_open_v2(path, &db_, SQLITE_OPEN_READWRITE, nullptr) != SQLITE_OK)
+  if (let ret = sqlite3_open_v2(path, &db_, SQLITE_OPEN_READWRITE, nullptr);
+      ret != SQLITE_OK)
   {
-    let msg = db_ ? sqlite3_errmsg(db_) : "unknown error";
-    if (let db = std::exchange(db_, nullptr); db != nullptr) {
+    auto msg = std::string(db_ ? sqlite3_errmsg(db_) : sqlite3_errstr(ret));
+    if (msg.empty()) {
+      msg += "unknown error"sv;
+    }
+    if (let db = std::exchange(db_, nullptr)) {
       sqlite3_close(db);
     }
     throw std::runtime_error(
@@ -116,10 +121,9 @@ product_db::product_db()
       "  id_to TEXT NOT NULL"
       ");";
 
-  char* err = nullptr;
-  if (sqlite3_exec(db_, schema, nullptr, nullptr, &err) != SQLITE_OK) {
-    let msg = err != nullptr ? err : "unknown error"s;
-    sqlite3_free(err);
+  if (sqlite3_exec(db_, schema, nullptr, nullptr, nullptr) != SQLITE_OK) {
+    let err = sqlite3_errmsg(db_);
+    let msg = err ? err : "unknown error"s;
     sqlite3_close(std::exchange(db_, nullptr));
     throw std::runtime_error(
         fmt::format("Failed to initialize database schema: {}", msg));
