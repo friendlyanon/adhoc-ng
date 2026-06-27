@@ -11,11 +11,6 @@ struct sqlite3;
 namespace adhoc
 {
 
-auto cstr(auto ptr)
-{
-  return reinterpret_cast<char const*>(ptr);
-}
-
 // Tables (auto-created on open):
 //   productids(id TEXT PRIMARY KEY, name TEXT NOT NULL)
 //   crosslinks(id_from TEXT PRIMARY KEY, id_to TEXT NOT NULL)

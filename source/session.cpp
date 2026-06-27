@@ -17,6 +17,7 @@
 
 #include "fwd_mov.hpp"
 #include "registry.hpp"
+#include "string.hpp"
 
 using boost::asio::awaitable;
 using boost::asio::co_spawn;

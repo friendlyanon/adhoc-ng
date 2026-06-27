@@ -31,15 +31,6 @@ enum opcode : std::uint8_t
   OPCODE_CHAT = 7,
 };
 
-constexpr std::size_t bounded_strlen(let* data, std::size_t max) noexcept
-{
-  auto len = 0zu;
-  while (len != max && data[len] != 0) {
-    ++len;
-  }
-  return len;
-}
-
 #pragma pack(push, 1)
 
 struct ether_addr

@@ -13,6 +13,7 @@
 #include "database.hpp"
 #include "fwd_mov.hpp"
 #include "session.hpp"
+#include "string.hpp"
 
 using namespace std::string_view_literals;
 

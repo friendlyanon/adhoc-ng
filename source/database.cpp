@@ -8,14 +8,14 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <utility>
 
 #include "database.hpp"
 
 #include <fmt/format.h>
 #include <sqlite3.h>
 
-using namespace std::string_literals;
+#include "string.hpp"
+
 using namespace std::string_view_literals;
 
 using std::out_ptr;
@@ -98,13 +98,27 @@ product_db::product_db()
     return;
   }
 
+  char buffer[256];
+  let to_msg = [&](char const* error)
+  {
+    let n = bounded_strlen(error, sizeof(buffer));
+    std::memcpy(buffer, error, n);
+    return string_view(buffer, n);
+  };
+
   if (let ret = sqlite3_open_v2(path, &db_, SQLITE_OPEN_READWRITE, nullptr);
       ret != SQLITE_OK)
   {
-    let msg = std::string(db_ ? sqlite3_errmsg(db_) : sqlite3_errstr(ret));
-    if (let db = std::exchange(db_, nullptr)) {
-      sqlite3_close(db);
-    }
+    let msg = [&]() -> string_view
+    {
+      if (db_) {
+        let msg_ = to_msg(sqlite3_errmsg(db_));
+        sqlite3_close(db_);
+        return msg_;
+      }
+
+      return sqlite3_errstr(ret);
+    }();
     throw std::runtime_error(
         fmt::format("Failed to open database '{}': {}", path, msg));
   }
@@ -120,8 +134,8 @@ product_db::product_db()
       ");";
 
   if (sqlite3_exec(db_, schema, nullptr, nullptr, nullptr) != SQLITE_OK) {
-    let msg = std::string(sqlite3_errmsg(db_));
-    sqlite3_close(std::exchange(db_, nullptr));
+    let msg = to_msg(sqlite3_errmsg(db_));
+    sqlite3_close(db_);
     throw std::runtime_error(
         fmt::format("Failed to initialize database schema: {}", msg));
   }
