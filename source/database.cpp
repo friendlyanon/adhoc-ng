@@ -151,7 +151,10 @@ void product_db::apply_crosslink(product_code& code)
   let stmt = prepare("SELECT id_to FROM crosslinks WHERE id_from = ?;"sv);
   let stmt_ptr = stmt.get();
   bind(stmt_ptr, 1, id);
-  ignore(ckd(sqlite3_step(stmt_ptr), SQLITE_ROW));
+  if (!ckd(sqlite3_step(stmt_ptr), SQLITE_ROW)) {
+    return;
+  }
+
   let dst = cstr(sqlite3_column_text(stmt_ptr, 0));
   if (dst == nullptr) {
     return;
@@ -159,9 +162,14 @@ void product_db::apply_crosslink(product_code& code)
 
   let bytes = sqlite3_column_bytes(stmt_ptr, 0);
   let n = std::min(static_cast<std::size_t>(bytes), PRODUCT_CODE_LENGTH);
+  let new_id = string_view(dst, n);
+  if (new_id == id) {
+    return;
+  }
+
   code = {};
   std::memcpy(code.data, dst, n);
-  fmt::println("Crosslinked {} to {}", id, string_view(dst, n));
+  fmt::println("Crosslinked {} to {}", id, new_id);
 }
 
 std::string product_db::display_name_for(product_code const& code)
@@ -170,10 +178,11 @@ std::string product_db::display_name_for(product_code const& code)
   let stmt = prepare("SELECT name FROM productids WHERE id = ?;"sv);
   let stmt_ptr = stmt.get();
   bind(stmt_ptr, 1, id);
-  ignore(ckd(sqlite3_step(stmt_ptr), SQLITE_ROW));
-  if (let name = cstr(sqlite3_column_text(stmt_ptr, 0))) {
-    let n = sqlite3_column_bytes(stmt_ptr, 0);
-    return {name, static_cast<std::size_t>(n)};
+  if (ckd(sqlite3_step(stmt_ptr), SQLITE_ROW)) {
+    if (let name = cstr(sqlite3_column_text(stmt_ptr, 0))) {
+      let n = sqlite3_column_bytes(stmt_ptr, 0);
+      return {name, static_cast<std::size_t>(n)};
+    }
   }
 
   return std::string(id);
