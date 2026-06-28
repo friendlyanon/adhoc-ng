@@ -37,12 +37,10 @@ void ignore(let&) {}
 bool ckd_(sqlite3* db, int actual, int expected, int line)
 {
   if (actual != expected) {
-    switch (((expected == SQLITE_ROW) << 3) | ((expected == SQLITE_DONE) << 2)
-            | ((actual == SQLITE_ROW) << 1) | (actual == SQLITE_DONE))
+    if ((expected == SQLITE_ROW && actual == SQLITE_DONE)
+        || (expected == SQLITE_DONE && actual == SQLITE_ROW))
     {
-      case 0b1001:
-      case 0b0110:
-        return false;
+      return false;
     }
 
     let msg = sqlite3_errmsg(db);
@@ -174,7 +172,7 @@ std::string product_db::display_name_for(product_code const& code)
   let stmt_ptr = stmt.get();
   bind(stmt_ptr, 1, id);
   ignore(ckd(sqlite3_step(stmt_ptr), SQLITE_ROW));
-  if (let name = cstr(sqlite3_column_text(stmt_ptr, 0)); name != nullptr) {
+  if (let name = cstr(sqlite3_column_text(stmt_ptr, 0))) {
     let n = sqlite3_column_bytes(stmt_ptr, 0);
     return {name, static_cast<std::size_t>(n)};
   }
