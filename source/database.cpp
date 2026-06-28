@@ -100,8 +100,7 @@ product_db::product_db()
   let to_msg = [&](char const* error)
   {
     let n = bounded_strlen(error, sizeof(buffer));
-    std::memcpy(buffer, error, n);
-    return string_view(buffer, n);
+    return string_view(cstr(std::memcpy(buffer, error, n)), n);
   };
 
   if (let ret = sqlite3_open_v2(path, &db_, SQLITE_OPEN_READWRITE, nullptr);
