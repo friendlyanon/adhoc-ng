@@ -45,25 +45,25 @@ void append_json_escaped(std::string& out, std::string_view s)
     let uc = static_cast<unsigned char>(c);
     switch (c) {
       case '"':
-        fmt::format_to(out_it, R"(\")");
+        out += R"(\")"sv;
         break;
       case '\\':
-        fmt::format_to(out_it, R"(\\)");
+        out += R"(\\)"sv;
         break;
       case '\b':
-        fmt::format_to(out_it, R"(\b)");
+        out += R"(\b)"sv;
         break;
       case '\f':
-        fmt::format_to(out_it, R"(\f)");
+        out += R"(\f)"sv;
         break;
       case '\n':
-        fmt::format_to(out_it, R"(\n)");
+        out += R"(\n)"sv;
         break;
       case '\r':
-        fmt::format_to(out_it, R"(\r)");
+        out += R"(\r)"sv;
         break;
       case '\t':
-        fmt::format_to(out_it, R"(\t)");
+        out += R"(\t)"sv;
         break;
       default:
         if (uc < 0x20) {
@@ -94,24 +94,24 @@ void build_status_json(std::string& out, registry& reg)
     std::memcpy(code.data, user.product_code.data(), n);
     let display = reg.display_name_for(code);
 
-    fmt::format_to(out_it, R"({{"name":")");
+    out += R"({"name":")"sv;
     append_json_escaped(out, user.name);
-    fmt::format_to(out_it, R"(","game":{{"product_code":")");
+    out += R"(","game":{"product_code":")"sv;
     append_json_escaped(out, user.product_code);
-    fmt::format_to(out_it, R"(","display_name":")");
+    out += R"(","display_name":")"sv;
     append_json_escaped(out, display);
-    fmt::format_to(out_it, R"("}},"group":)");
+    out += R"("},"group":)"sv;
     if (user.group) {
       out.push_back('"');
       append_json_escaped(out, *user.group);
       out.push_back('"');
     } else {
-      fmt::format_to(out_it, "null");
+      out += "null"sv;
     }
     out.push_back('}');
   }
 
-  fmt::format_to(out_it, "]}}");
+  out += "]}"sv;
 }
 
 template<class Stream>
