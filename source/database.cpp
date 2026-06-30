@@ -32,8 +32,6 @@ string_view product_code_str(product_code const& code)
   return {code.data, bounded_strlen(code.data, PRODUCT_CODE_LENGTH)};
 }
 
-void ignore(let&) {}
-
 bool ckd_(sqlite3* db, int actual, int expected, int line)
 {
   if (actual != expected) {
@@ -55,7 +53,7 @@ void bind_(sqlite3* db, sqlite3_stmt* stmt, int idx, string_view str, int line)
 {
   let ret = sqlite3_bind_text(
       stmt, idx, str.data(), static_cast<int>(str.size()), SQLITE_STATIC);
-  ignore(ckd_(db, ret, SQLITE_OK, line));
+  ckd_(db, ret, SQLITE_OK, line);
 }
 
 #define ckd(actual, expected) (ckd_(db_, (actual), (expected), __LINE__))
@@ -78,7 +76,7 @@ statement_ptr prepare_(sqlite3* db, string_view sql, int line)
   auto stmt = statement_ptr {};
   let ret = sqlite3_prepare_v2(
       db, sql.data(), static_cast<int>(sql.size()), out_ptr(stmt), nullptr);
-  ignore(ckd_(db, ret, SQLITE_OK, line));
+  ckd_(db, ret, SQLITE_OK, line);
   return stmt;
 }
 
@@ -151,7 +149,7 @@ void product_db::apply_crosslink(product_code& code)
   let stmt = prepare("SELECT id_to FROM crosslinks WHERE id_from = ?;"sv);
   let stmt_ptr = stmt.get();
   bind(stmt_ptr, 1, id);
-  if (!ckd(sqlite3_step(stmt_ptr), SQLITE_ROW)) {
+  if (ckd(sqlite3_step(stmt_ptr), SQLITE_DONE)) {
     return;
   }
 
@@ -206,7 +204,7 @@ void product_db::record_unknown_product(product_code const& code)
     let stmt_ptr = stmt.get();
     bind(stmt_ptr, 1, id);
     bind(stmt_ptr, 2, id);
-    ignore(ckd(sqlite3_step(stmt_ptr), SQLITE_DONE));
+    ckd(sqlite3_step(stmt_ptr), SQLITE_DONE);
     fmt::println("Added unknown product id {} to database", id);
   }
 }
