@@ -16,14 +16,6 @@
 #include <variant>
 #include <vector>
 
-#ifdef __linux__
-#  include <array>
-
-#  include <sys/socket.h>
-#  include <sys/un.h>
-#  include <unistd.h>
-#endif
-
 #include <boost/asio.hpp>
 #include <boost/smart_ptr.hpp>
 #include <boost/system.hpp>
@@ -84,33 +76,10 @@ class usage_error : public std::runtime_error
 
   When server-endpoint is not provided, the server binds to 0.0.0.0:{2}.
   When status-endpoint is not provided, the status endpoint will not be
-  started.)"
-#ifdef __linux__
-                  R"(
-
-  On Linux, you can run the program in systemd socket-activation mode by
-  passing the single argument "systemd". In this mode the program uses the
-  sockets passed by systemd via the LISTEN_FDS and LISTEN_PID environment
-  variables. Behavior:
-
-    LISTEN_FDS = 2
-      The first socket is used for the game server and the second for the
-      status server.
-    LISTEN_FDS = 1
-      The first socket is used for the game server; the status server is not
-      started.
-    LISTEN_FDS = 0 (or not set)
-      The server binds to the default game server port ({2}) and the
-      status server is not started.
-
-  If LISTEN_PID is set it must match the server process PID; otherwise the
-  server exits with an error. Values of LISTEN_FDS greater than 2 are not
-  supported.)"
-#endif
-                  ,
-                  quote,
-                  base,
-                  default_server_port));
+  started.)",
+      quote,
+      base,
+      default_server_port));
 }
 
 bool has_help_argument(std::span<std::string_view> args)
@@ -263,49 +232,9 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
     usage(program);
   }
 
-  auto maybe_enter_systemd_mode = false;
-#ifdef __linux__
-  auto systemd_mode = false;
-  auto systemd_fds = 0;
-  auto systemd_fd_list = std::array<int, 2> {{-1, -1}};
-  maybe_enter_systemd_mode = args.size() == 1 && args[0] == "systemd"sv;
-
-  if (maybe_enter_systemd_mode) {
-    if (auto pid_env = std::getenv("LISTEN_PID")) {
-      if (auto parsed = scn::scan_int<long>(pid_env)) {
-        if (static_cast<long>(::getpid()) != parsed->value()) {
-          throw std::runtime_error("LISTEN_PID does not match process PID");
-        }
-      } else {
-        throw std::runtime_error("Invalid LISTEN_PID environment variable");
-      }
-    }
-
-    if (auto fds_env = std::getenv("LISTEN_FDS")) {
-      if (auto parsed = scn::scan_int<int>(fds_env)) {
-        systemd_fds = parsed->value();
-      } else {
-        throw std::runtime_error("Invalid LISTEN_FDS environment variable");
-      }
-    }
-
-    if (systemd_fds < 0 || systemd_fds > 2) {
-      throw std::runtime_error("Unsupported LISTEN_FDS value; max 2 supported");
-    }
-
-    if (systemd_fds > 0) {
-      systemd_mode = true;
-      constexpr int SD_LISTEN_FDS_START = 3;
-      for (int i = 0; i != systemd_fds; ++i) {
-        systemd_fd_list[static_cast<std::size_t>(i)] = SD_LISTEN_FDS_START + i;
-      }
-    }
-  }
-#endif
-
   let game_endpoint = [&]() -> parsed_endpoint
   {
-    if (args.size() < 1 || maybe_enter_systemd_mode) {
+    if (args.size() < 1) {
       return tcp::endpoint {tcp::v4(), default_server_port};
     }
 
@@ -321,66 +250,24 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
     return parse_endpoint(args[1]);
   }();
 
-  if (!maybe_enter_systemd_mode) {
-    let had_parsing_error = [&]
-    {
-      auto handler = handle_parsing_error {err_out, "server"sv};
-      auto result = false;
-      result = std::visit(handler, game_endpoint) || result;
-      handler.arg = "status"sv;
-      result = std::visit(handler, status_endpoint) || result;
-      return result;
-    }();
-    if (had_parsing_error) {
-      usage(program);
-    }
+  let had_parsing_error = [&]
+  {
+    auto handler = handle_parsing_error {err_out, "server"sv};
+    auto result = false;
+    result = std::visit(handler, game_endpoint) || result;
+    handler.arg = "status"sv;
+    result = std::visit(handler, status_endpoint) || result;
+    return result;
+  }();
+  if (had_parsing_error) {
+    usage(program);
   }
 
   auto io_context = boost::asio::io_context {1};
   let acceptor_visitor = to_acceptor {io_context};
-#ifdef __linux__
-  auto game_acceptor = maybe_acceptor {};
-  auto status_acceptor = maybe_acceptor {};
-  if (systemd_mode) {
-    let fd_to_acceptor = [&](int fd, let& endpoint) -> maybe_acceptor
-    {
-      if (fd >= 0) {
-        auto addr = sockaddr_storage {};
-        socklen_t len = sizeof(addr);
-        if (::getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len) != 0) {
-          throw std::runtime_error("getsockname failed for systemd socket");
-        }
 
-        if (addr.ss_family == AF_UNIX) {
-          auto acceptor = stream_protocol::acceptor {io_context};
-          acceptor.assign(stream_protocol(), fd);
-          return acceptor;
-        } else if (addr.ss_family == AF_INET || addr.ss_family == AF_INET6) {
-          auto acceptor = tcp::acceptor {io_context};
-          if (addr.ss_family == AF_INET) {
-            acceptor.assign(tcp::v4(), fd);
-          } else {
-            acceptor.assign(tcp::v6(), fd);
-          }
-          return acceptor;
-        }
-      }
-
-      return std::visit(acceptor_visitor, endpoint);
-    };
-
-    game_acceptor = fd_to_acceptor(systemd_fd_list[0], game_endpoint);
-    if (systemd_fds != 1) {
-      status_acceptor = fd_to_acceptor(systemd_fd_list[1], status_endpoint);
-    }
-  } else {
-    game_acceptor = std::visit(acceptor_visitor, game_endpoint);
-    status_acceptor = std::visit(acceptor_visitor, status_endpoint);
-  }
-#else
   auto game_acceptor = std::visit(acceptor_visitor, game_endpoint);
   auto status_acceptor = std::visit(acceptor_visitor, status_endpoint);
-#endif
 
   auto db = adhoc::product_db {};
   auto reg = adhoc::registry {db};
