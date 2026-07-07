@@ -222,8 +222,9 @@ private:
 };
 
 template<class T>
-constexpr bool is_acceptor_v = std::is_same_v<T, tcp::acceptor>
-    || std::is_same_v<T, stream_protocol::acceptor>;
+constexpr bool is_acceptor_v = std::conjunction_v<  //
+    std::is_same<T, tcp::acceptor>,
+    std::is_same<T, stream_protocol::acceptor>>;
 
 std::string_view as_str(let& x)
 {
