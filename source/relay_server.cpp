@@ -163,16 +163,16 @@ struct mac
 
   template<std::size_t N>
     requires(N >= mac_size)
-  mac(char const (&mac)[N])
+  mac(char const (&in)[N])
   {
     fmt::format_to(str,
                    "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                   as_u8(mac[0]),
-                   as_u8(mac[1]),
-                   as_u8(mac[2]),
-                   as_u8(mac[3]),
-                   as_u8(mac[4]),
-                   as_u8(mac[5]));
+                   as_u8(in[0]),
+                   as_u8(in[1]),
+                   as_u8(in[2]),
+                   as_u8(in[3]),
+                   as_u8(in[4]),
+                   as_u8(in[5]));
   }
 
   auto view() const { return std::string_view(str, sizeof(str)); }

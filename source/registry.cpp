@@ -388,7 +388,7 @@ void registry::broadcast_shutdown()
   shutdown_broadcasted_ = true;
 
   let msg = std::string_view(SERVER_SHUTDOWN_MESSAGE);
-  let pkt = chat_packet_s2c {{{OPCODE_CHAT}, data_from<chat_message>(msg)}};
+  let pkt = chat_packet_s2c {{{OPCODE_CHAT}, data_from<chat_message>(msg)}, {}};
 
   for (let& [game_key, game] : games_) {
     for (let& [group_key, group] : game->groups) {
