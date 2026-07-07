@@ -27,6 +27,7 @@
 #include "fwd_mov.hpp"
 #include "game_server.hpp"
 #include "registry.hpp"
+#include "relay_server.hpp"
 #include "status_server.hpp"
 #include "utf8.hpp"
 
@@ -59,8 +60,8 @@ class usage_error : public std::runtime_error
 {
   let base = fs::path(std::string(program)).filename().string();
   let quote = ctre::search<R"([ :()\[\]{}])">(base) ? "\""sv : ""sv;
-  throw usage_error(
-      fmt::format(R"(Usage: {0}{1}{0} [server-endpoint] [status-endpoint]
+  throw usage_error(fmt::format(
+      R"(Usage: {0}{1}{0} [server-endpoint] [status-endpoint] [--relay [relay-endpoint]]
 
   Endpoint format:
     {2}
@@ -76,7 +77,9 @@ class usage_error : public std::runtime_error
 
   When server-endpoint is not provided, the server binds to 0.0.0.0:{2}.
   When status-endpoint is not provided, the status endpoint will not be
-  started.)",
+  started.
+  When --relay is provided without an argument, the relay binds to the same
+  address as the game server on the next port number.)",
       quote,
       base,
       default_server_port));
@@ -218,6 +221,15 @@ private:
   boost::asio::io_context* io_context_;
 };
 
+template<class T>
+constexpr bool is_acceptor_v = std::is_same_v<T, tcp::acceptor>
+    || std::is_same_v<T, stream_protocol::acceptor>;
+
+std::string_view as_str(let& x)
+{
+  return {x.data(), x.size()};
+}
+
 }  // namespace
 
 // Entrypoint
@@ -228,26 +240,64 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
 {
   let program = argv.size() == 0 ? "<unknown>"sv : argv[0];
   let args = argv.subspan(1u);
-  if (args.size() > 2 || has_help_argument(args)) {
+  if (has_help_argument(args)) {
+    usage(program);
+  }
+
+  let relay_pos = std::find(args.begin(), args.end(), "--relay"sv);
+  let has_relay = relay_pos != args.end();
+  let relay_index = static_cast<std::size_t>(relay_pos - args.begin());
+  let server_args = has_relay ? args.first(relay_index) : args;
+  let relay_args = has_relay ? args.subspan(relay_index + 1)
+                             : std::span<std::string_view> {};
+  if (server_args.size() > 2 || relay_args.size() > 1) {
     usage(program);
   }
 
   let game_endpoint = [&]() -> parsed_endpoint
   {
-    if (args.size() < 1) {
+    if (server_args.size() < 1) {
       return tcp::endpoint {tcp::v4(), default_server_port};
     }
 
-    return parse_endpoint(args[0]);
+    return parse_endpoint(server_args[0]);
   }();
 
   let status_endpoint = [&]() -> parsed_endpoint
   {
-    if (args.size() < 2) {
+    if (server_args.size() < 2) {
       return {};
     }
 
-    return parse_endpoint(args[1]);
+    return parse_endpoint(server_args[1]);
+  }();
+
+  let relay_endpoint = [&]() -> parsed_endpoint
+  {
+    if (!has_relay) {
+      return {};
+    }
+
+    if (!relay_args.empty()) {
+      return parse_endpoint(relay_args[0]);
+    }
+
+    let next_port = [](auto const& value) -> parsed_endpoint
+    {
+      using T = std::decay_t<decltype(value)>;
+      if constexpr (std::is_same_v<T, tcp::endpoint>) {
+        let port = value.port();
+        if (port == std::numeric_limits<std::uint16_t>::max()) {
+          return errc::make_error_code(errc::value_too_large);
+        }
+
+        let relay_port = static_cast<std::uint16_t>(port + 1);
+        return tcp::endpoint {value.address(), relay_port};
+      } else {
+        return errc::make_error_code(errc::invalid_argument);
+      }
+    };
+    return std::visit(next_port, game_endpoint);
   }();
 
   let had_parsing_error = [&]
@@ -257,6 +307,8 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
     result = std::visit(handler, game_endpoint) || result;
     handler.arg = "status"sv;
     result = std::visit(handler, status_endpoint) || result;
+    handler.arg = "relay"sv;
+    result = std::visit(handler, relay_endpoint) || result;
     return result;
   }();
   if (had_parsing_error) {
@@ -268,6 +320,7 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
 
   auto game_acceptor = std::visit(acceptor_visitor, game_endpoint);
   auto status_acceptor = std::visit(acceptor_visitor, status_endpoint);
+  auto relay_acceptor = std::visit(acceptor_visitor, relay_endpoint);
 
   auto db = adhoc::product_db {};
   auto reg = adhoc::registry {db};
@@ -283,6 +336,13 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
   {
     auto coro = [&]() -> awaitable<void>
     { co_await adhoc::run_status_server(acceptor, reg); };
+    co_spawn(io_context, MOV(coro), detached);
+  };
+
+  let spawn_relay = [&](auto& acceptor)
+  {
+    auto coro = [&]() -> awaitable<void>
+    { co_await adhoc::run_relay_server(acceptor); };
     co_spawn(io_context, MOV(coro), detached);
   };
 
@@ -304,13 +364,10 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
   let start_game_server = [&](auto& acceptor)
   {
     using T = std::decay_t<decltype(acceptor)>;
-    if constexpr (std::is_same_v<T, tcp::acceptor>
-                  || std::is_same_v<T, stream_protocol::acceptor>)
-    {
+    if constexpr (is_acceptor_v<T>) {
       auto buf = fmt::memory_buffer {};
       describe_endpoint(acceptor, buf);
-      fmt::println("Game server listening on {}",
-                   std::string_view {buf.data(), buf.size()});
+      fmt::println("Game server listening on {}", as_str(buf));
       spawn_game(acceptor);
     }
   };
@@ -319,17 +376,26 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
   let start_status_server = [&](auto& acceptor)
   {
     using T = std::decay_t<decltype(acceptor)>;
-    if constexpr (std::is_same_v<T, tcp::acceptor>
-                  || std::is_same_v<T, stream_protocol::acceptor>)
-    {
+    if constexpr (is_acceptor_v<T>) {
       auto buf = fmt::memory_buffer {};
       describe_endpoint(acceptor, buf);
-      fmt::println("Status server listening on {}",
-                   std::string_view {buf.data(), buf.size()});
+      fmt::println("Status server listening on {}", as_str(buf));
       spawn_status(acceptor);
     }
   };
   std::visit(start_status_server, status_acceptor);
+
+  let start_relay_server = [&](auto& acceptor)
+  {
+    using T = std::decay_t<decltype(acceptor)>;
+    if constexpr (is_acceptor_v<T>) {
+      auto buf = fmt::memory_buffer {};
+      describe_endpoint(acceptor, buf);
+      fmt::println("Relay server listening on {}", as_str(buf));
+      spawn_relay(acceptor);
+    }
+  };
+  std::visit(start_relay_server, relay_acceptor);
 
   auto signals = boost::asio::signal_set {io_context, SIGINT, SIGTERM};
 #ifdef SIGBREAK
@@ -339,7 +405,7 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
   let close_acceptor = [](auto& acceptor)
   {
     using T = std::decay_t<decltype(acceptor)>;
-    if constexpr (!std::is_same_v<T, std::monostate>) {
+    if constexpr (is_acceptor_v<T>) {
       auto ignore = error_code {};
       acceptor.close(ignore);
     }
@@ -351,6 +417,7 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
     reg.broadcast_shutdown();
     std::visit(close_acceptor, game_acceptor);
     std::visit(close_acceptor, status_acceptor);
+    std::visit(close_acceptor, relay_acceptor);
     let drain_timer = std::make_shared<boost::asio::steady_timer>(io_context);
     drain_timer->expires_after(std::chrono::milliseconds(250));
     auto on_drained = [&io_context, drain_timer](error_code const&)

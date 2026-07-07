@@ -11,6 +11,7 @@ add_executable(
     source/session.cpp
     source/game_server.cpp
     source/status_server.cpp
+    source/relay_server.cpp
     source/resource.rc
 )
 target_include_directories(adhoc-server-pro PRIVATE source)
