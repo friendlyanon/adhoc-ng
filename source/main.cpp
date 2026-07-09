@@ -222,7 +222,7 @@ private:
 };
 
 template<class T>
-constexpr bool is_acceptor_v = std::conjunction_v<  //
+constexpr bool is_acceptor_v = std::disjunction_v<  //
     std::is_same<T, tcp::acceptor>,
     std::is_same<T, stream_protocol::acceptor>>;
 
