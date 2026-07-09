@@ -78,9 +78,9 @@ void append_json_escaped(std::string& out, std::string_view s)
 void build_status_json(std::string& out, registry& reg)
 {
   let users = reg.snapshot_for_status();
-  auto out_it = std::back_inserter(out);
 
-  fmt::format_to(out_it, R"({{"user_count":{},"users":[)", users.size());
+  fmt::format_to(
+      std::back_inserter(out), R"({{"user_count":{},"users":[)", users.size());
 
   auto first = true;
   for (let& user : users) {
