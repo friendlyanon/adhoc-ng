@@ -110,22 +110,7 @@ registry::registry(product_db& db)
 
 registry::~registry() = default;
 
-bool registry::try_open_connection(boost::asio::ip::address_v4 const& addr,
-                                   bool track_address)
-{
-  if (connection_count_ >= SERVER_USER_MAXIMUM) {
-    return false;
-  }
-  if (track_address) {
-    if (!connected_v4_.insert(addr.to_uint()).second) {
-      return false;
-    }
-  }
-  ++connection_count_;
-  return true;
-}
-
-bool registry::try_open_connection_anonymous()
+bool registry::try_open_connection()
 {
   if (connection_count_ >= SERVER_USER_MAXIMUM) {
     return false;
@@ -155,11 +140,6 @@ void registry::close_connection(user_session& session)
     destroy_game_if_empty(game);
   } else {
     fmt::println("Dropped connection to {}", session.peer_label);
-  }
-
-  if (session.tracks_address) {
-    connected_v4_.erase(session.address_v4_host);
-    session.tracks_address = false;
   }
 
   if (connection_count_ != 0) {

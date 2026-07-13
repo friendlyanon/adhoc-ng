@@ -60,9 +60,7 @@ public:
   registry(registry const&) = delete;
   registry& operator=(registry const&) = delete;
 
-  bool try_open_connection(boost::asio::ip::address_v4 const& addr,
-                           bool track_address);
-  bool try_open_connection_anonymous();  // for UNIX-socket / IPv6 connections
+  bool try_open_connection();
 
   void close_connection(user_session& session);
 
@@ -90,7 +88,6 @@ private:
                      adhoc::transparent_string_hash,
                      std::equal_to<>>
       games_;
-  std::unordered_set<std::uint32_t> connected_v4_;
   std::size_t connection_count_ = 0;
   bool shutdown_broadcasted_ = false;
 };

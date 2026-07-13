@@ -59,13 +59,13 @@ awaitable<void> run_game_server(tcp::acceptor& acceptor, registry& reg)
       host = v4.to_uint();
       let bytes = v4.to_bytes();
       std::memcpy(&ip_be, bytes.data(), 4);
-      if (!reg.try_open_connection(v4, true)) {
+      if (!reg.try_open_connection()) {
         socket.close(ep_ec);
         continue;
       }
       label = v4.to_string();
     } else {
-      if (!reg.try_open_connection_anonymous()) {
+      if (!reg.try_open_connection()) {
         socket.close(ep_ec);
         continue;
       }
@@ -75,8 +75,6 @@ awaitable<void> run_game_server(tcp::acceptor& acceptor, registry& reg)
     using Session = session_impl<tcp::socket>;
     let session_ptr = std::make_shared<Session>(MOV(socket), reg);
     let session = session_ptr.get();
-    session->tracks_address = track;
-    session->address_v4_host = host;
     session->ip_be = ip_be;
     session->peer_label = MOV(label);
 
@@ -100,7 +98,7 @@ awaitable<void> run_game_server(stream_protocol::acceptor& acceptor,
       continue;
     }
 
-    if (!reg.try_open_connection_anonymous()) {
+    if (!reg.try_open_connection()) {
       auto close_ec = error_code {};
       socket.close(close_ec);
       continue;

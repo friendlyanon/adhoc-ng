@@ -36,9 +36,7 @@ public:
   virtual void close() = 0;
 
   // Set by the accept code.
-  bool tracks_address = false;
-  std::uint32_t address_v4_host = 0;  // only valid if tracks_address
-  std::uint32_t ip_be = 0;  // network-order IPv4 for wire packets
+  std::uint32_t ip_be = 0;  // network-order IPv4
   std::string peer_label;  // for logs
 
   // Populated by registry on successful LOGIN.
