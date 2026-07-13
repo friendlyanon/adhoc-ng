@@ -22,7 +22,6 @@ namespace adhoc
 {
 
 class registry;
-class product_db;
 struct game_node;
 struct group_node;
 
