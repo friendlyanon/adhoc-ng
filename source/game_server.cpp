@@ -51,12 +51,10 @@ awaitable<void> run_game_server(tcp::acceptor& acceptor, registry& reg)
     let address = endpoint.address();
     auto track = address.is_v4();
     auto ip_be = std::uint32_t {};
-    auto host = std::uint32_t {};
     auto label = std::string {};
 
     if (track) {
       let v4 = address.to_v4();
-      host = v4.to_uint();
       let bytes = v4.to_bytes();
       std::memcpy(&ip_be, bytes.data(), 4);
       if (!reg.try_open_connection()) {
