@@ -70,7 +70,10 @@
     },
     {
       "name": "ci-windows",
-      "inherits": ["flags-msvc", "ci-build", "vcpkg-win64-static"]
+      "inherits": ["flags-msvc", "ci-build", "vcpkg-win64-static"],
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS_RELEASE": "/O2 /Ob2 /DNDEBUG /wd4702"
+      }
     }
   ]
 }
