@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-#include <cstring>
+#include <bit>
 #include <memory>
 #include <string_view>
 
@@ -47,6 +47,10 @@ awaitable<void> run_game_server(tcp::acceptor& acceptor, registry& reg)
       socket.close(ep_ec);
       continue;
     }
+    if (!reg.try_open_connection()) {
+      socket.close(ep_ec);
+      continue;
+    }
 
     let address = endpoint.address();
     auto track = address.is_v4();
@@ -56,17 +60,9 @@ awaitable<void> run_game_server(tcp::acceptor& acceptor, registry& reg)
     if (track) {
       let v4 = address.to_v4();
       let bytes = v4.to_bytes();
-      std::memcpy(&ip_be, bytes.data(), 4);
-      if (!reg.try_open_connection()) {
-        socket.close(ep_ec);
-        continue;
-      }
+      ip_be = std::bit_cast<std::uint32_t>(bytes);
       label = v4.to_string();
     } else {
-      if (!reg.try_open_connection()) {
-        socket.close(ep_ec);
-        continue;
-      }
       label = address.to_string();
     }
 
