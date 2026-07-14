@@ -60,6 +60,7 @@ enum aemu_postoffice_init_type : std::int32_t
 };
 
 #pragma pack(push, 1)
+
 struct aemu_string
 {
   char data[8];
@@ -91,7 +92,14 @@ struct aemu_postoffice_ptp_data
 {
   std::uint32_t size;
 };
+
 #pragma pack(pop)
+
+static_assert(sizeof(aemu_string) == 8);
+static_assert(sizeof(aemu_postoffice_init) == 24);
+static_assert(sizeof(aemu_postoffice_pdp) == 14);
+static_assert(sizeof(aemu_postoffice_ptp_connect) == 10);
+static_assert(sizeof(aemu_postoffice_ptp_data) == 4);
 
 constexpr let mac_size = 6;
 
