@@ -46,9 +46,9 @@ struct game_node
 
 struct status_user
 {
-  std::string name;
-  std::string product_code;
-  std::optional<std::string> group;
+  std::string_view name;
+  std::string_view product_code;
+  std::optional<std::string_view> group;
 };
 
 class registry
@@ -74,7 +74,8 @@ public:
 
   std::vector<status_user> snapshot_for_status() const;
 
-  std::string display_name_for(product_code const& code);
+  std::string display_name_for(std::string_view code) const;
+  std::string display_name_for(product_code const& code) const;
 
   std::size_t connection_count() const noexcept { return connection_count_; }
 

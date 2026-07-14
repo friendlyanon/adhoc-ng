@@ -12,9 +12,10 @@ namespace adhoc
 class registry;
 
 boost::asio::awaitable<void> run_status_server(
-    boost::asio::ip::tcp::acceptor& acceptor, registry& reg);
+    boost::asio::ip::tcp::acceptor& acceptor, registry const& reg);
 
 boost::asio::awaitable<void> run_status_server(
-    boost::asio::local::stream_protocol::acceptor& acceptor, registry& reg);
+    boost::asio::local::stream_protocol::acceptor& acceptor,
+    registry const& reg);
 
 }  // namespace adhoc

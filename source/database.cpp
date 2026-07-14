@@ -170,12 +170,11 @@ void product_db::apply_crosslink(product_code& code)
   fmt::println("Crosslinked {} to {}", id, new_id);
 }
 
-std::string product_db::display_name_for(product_code const& code)
+std::string product_db::display_name_for(string_view code) const
 {
-  let id = product_code_str(code);
   let stmt = prepare("SELECT name FROM productids WHERE id = ?;"sv);
   let stmt_ptr = stmt.get();
-  bind(stmt_ptr, 1, id);
+  bind(stmt_ptr, 1, code);
   if (ckd(sqlite3_step(stmt_ptr), SQLITE_ROW)) {
     if (let name = cstr(sqlite3_column_text(stmt_ptr, 0))) {
       let n = sqlite3_column_bytes(stmt_ptr, 0);
@@ -183,7 +182,12 @@ std::string product_db::display_name_for(product_code const& code)
     }
   }
 
-  return std::string(id);
+  return std::string(code);
+}
+
+std::string product_db::display_name_for(product_code const& code) const
+{
+  return display_name_for(product_code_str(code));
 }
 
 void product_db::record_unknown_product(product_code const& code)

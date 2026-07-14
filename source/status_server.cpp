@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "status_server.hpp"
 
@@ -75,47 +77,107 @@ void append_json_escaped(std::string& out, std::string_view s)
   }
 }
 
-void build_status_json(std::string& out, registry& reg)
+struct status_group
+{
+  std::string_view name;
+  std::vector<std::string_view> users;
+};
+
+struct status_game
+{
+  std::string_view code;
+  std::string name;
+  std::size_t user_count = 0;
+  std::vector<status_group> groups;
+  std::unordered_map<std::string_view, std::size_t> group_index;
+};
+
+std::vector<status_game> build_status_games(registry const& reg)
 {
   let users = reg.snapshot_for_status();
+  auto games = std::vector<status_game> {};
+  auto game_index = std::unordered_map<std::string_view, std::size_t> {};
+  games.reserve(users.size());
+  game_index.reserve(users.size());
 
-  fmt::format_to(
-      std::back_inserter(out), R"({{"user_count":{},"users":[)", users.size());
-
-  auto first = true;
   for (let& user : users) {
+    let index_pair = game_index.try_emplace(user.product_code, games.size());
+    if (index_pair.second) {
+      let& code = user.product_code;
+      games.emplace_back(code, reg.display_name_for(code));
+    }
+
+    auto& game = games[index_pair.first->second];
+    ++game.user_count;
+
+    if (user.group) {
+      let pair = game.group_index.try_emplace(*user.group, game.groups.size());
+      if (pair.second) {
+        game.groups.emplace_back(*user.group);
+      }
+
+      game.groups[pair.first->second].users.push_back(user.name);
+    }
+  }
+
+  return games;
+}
+
+void build_status_json(std::string& out, registry const& reg)
+{
+  let games = build_status_games(reg);
+  let out_it = std::back_inserter(out);
+
+  out += R"({"games":[)"sv;
+  auto first = true;
+  for (let& game : games) {
     if (!first) {
       out.push_back(',');
     }
     first = false;
 
-    auto code = product_code {};
-    let n = std::min(user.product_code.size(), PRODUCT_CODE_LENGTH);
-    std::memcpy(code.data, user.product_code.data(), n);
-    let display = reg.display_name_for(code);
-
     out += R"({"name":")"sv;
-    append_json_escaped(out, user.name);
-    out += R"(","game":{"product_code":")"sv;
-    append_json_escaped(out, user.product_code);
-    out += R"(","display_name":")"sv;
-    append_json_escaped(out, display);
-    out += R"("},"group":)"sv;
-    if (user.group) {
-      out.push_back('"');
-      append_json_escaped(out, *user.group);
-      out.push_back('"');
-    } else {
-      out += "null"sv;
+    append_json_escaped(out, game.name);
+    fmt::format_to(
+        out_it, R"(","usercount":{},"game_ids":[")", game.user_count);
+    append_json_escaped(out, game.code);
+    out += R"("],"groups":[)"sv;
+
+    auto first_group = true;
+    for (let& group : game.groups) {
+      if (!first_group) {
+        out.push_back(',');
+      }
+      first_group = false;
+
+      out += R"({"name":")"sv;
+      append_json_escaped(out, group.name);
+      fmt::format_to(
+          out_it, R"(","usercount":{},"users":[)", group.users.size());
+
+      auto first_user = true;
+      for (let& user_name : group.users) {
+        if (!first_user) {
+          out.push_back(',');
+        }
+        first_user = false;
+
+        out += R"({"name":")"sv;
+        append_json_escaped(out, user_name);
+        out += "\"}"sv;
+      }
+
+      out += "]}"sv;
     }
-    out.push_back('}');
+
+    out += "]}"sv;
   }
 
   out += "]}"sv;
 }
 
 template<class Stream>
-awaitable<void> handle_status_connection(Stream stream, registry& reg)
+awaitable<void> handle_status_connection(Stream stream, registry const& reg)
 {
   auto ec = error_code {};
   auto buffer = beast::flat_buffer {};
@@ -153,7 +215,8 @@ awaitable<void> handle_status_connection(Stream stream, registry& reg)
 }
 
 template<class Acceptor>
-awaitable<void> run_status_server_generic(Acceptor& acceptor, registry& reg)
+awaitable<void> run_status_server_generic(Acceptor& acceptor,
+                                          registry const& reg)
 {
   using socket_type = typename Acceptor::protocol_type::socket;
   auto ec = error_code {};
@@ -176,13 +239,13 @@ awaitable<void> run_status_server_generic(Acceptor& acceptor, registry& reg)
 
 }  // namespace
 
-awaitable<void> run_status_server(tcp::acceptor& acceptor, registry& reg)
+awaitable<void> run_status_server(tcp::acceptor& acceptor, registry const& reg)
 {
   return run_status_server_generic(acceptor, reg);
 }
 
 awaitable<void> run_status_server(stream_protocol::acceptor& acceptor,
-                                  registry& reg)
+                                  registry const& reg)
 {
   return run_status_server_generic(acceptor, reg);
 }

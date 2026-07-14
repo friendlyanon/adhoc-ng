@@ -394,17 +394,21 @@ std::vector<status_user> registry::snapshot_for_status() const
   for (let& [game_key, game] : games_) {
     let& code = game->code_str;
     for (let session : game->users) {
-      auto& u = out.emplace_back(
-          std::string(nickname_str(session->name)), code, std::nullopt);
-      if (session->group) {
-        u.group = session->group->name;
+      auto& u = out.emplace_back(nickname_str(session->name), code);
+      if (let group = session->group) {
+        u.group = group->name;
       }
     }
   }
   return out;
 }
 
-std::string registry::display_name_for(product_code const& code)
+std::string registry::display_name_for(std::string_view code) const
+{
+  return db_->display_name_for(code);
+}
+
+std::string registry::display_name_for(product_code const& code) const
 {
   return db_->display_name_for(code);
 }
