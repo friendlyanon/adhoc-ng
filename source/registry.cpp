@@ -224,25 +224,20 @@ bool registry::handle_connect(user_session& session,
     group = it->second.get();
   }
 
-  // BSSID = MAC of the group founder (first player), or self if empty.
-  let bssid = connect_bssid_packet_s2c {
-      {OPCODE_CONNECT_BSSID},
-      group->players.empty() ? session.mac : group->players.front()->mac};
-
-  // Notify existing peers + send peer info to the joining user.
   for (let peer : group->players) {
-    let to_peer = connect_packet_s2c {
-        {OPCODE_CONNECT}, session.name, session.mac, session.ip_be};
-    peer->send_bytes(packet_bytes(to_peer));
+    peer->send_bytes(packet_bytes(connect_packet_s2c {
+        {OPCODE_CONNECT}, session.name, session.mac, session.ip_be}));
 
-    let to_self = connect_packet_s2c {
-        {OPCODE_CONNECT}, peer->name, peer->mac, peer->ip_be};
-    session.send_bytes(packet_bytes(to_self));
+    session.send_bytes(packet_bytes(connect_packet_s2c {
+        {OPCODE_CONNECT}, peer->name, peer->mac, peer->ip_be}));
   }
 
   group->players.push_back(&session);
   session.group = group;
-  session.send_bytes(packet_bytes(bssid));
+
+  session.send_bytes(packet_bytes(connect_bssid_packet_s2c {
+      {OPCODE_CONNECT_BSSID},
+      group->players.empty() ? session.mac : group->players.front()->mac}));
 
   fmt::println("{} ({}) joined {} group {}",
                nickname_str(session.name),
@@ -260,9 +255,12 @@ void registry::leave_group(user_session& session)
   }
   vector_remove(group->players, &session);
 
-  let pkt = disconnect_packet_s2c {{OPCODE_DISCONNECT}, session.ip_be};
-  for (let peer : group->players) {
-    peer->send_bytes(packet_bytes(pkt));
+  {
+    let bytes = packet_bytes(
+        disconnect_packet_s2c {{OPCODE_DISCONNECT}, session.ip_be});
+    for (let peer : group->players) {
+      peer->send_bytes(bytes);
+    }
   }
 
   fmt::println("{} ({}) left {} group {}",
@@ -310,9 +308,8 @@ bool registry::handle_scan(user_session& session)
   for (let& [group_key, group] : session.game->groups) {
     let& p = group->players;
     let mac = p.empty() ? session.mac : p.front()->mac;
-    let pkt = scan_packet_s2c {
-        {OPCODE_SCAN}, data_from<group_name>(group->name), mac};
-    session.send_bytes(packet_bytes(pkt));
+    session.send_bytes(packet_bytes(scan_packet_s2c {
+        {OPCODE_SCAN}, data_from<group_name>(group->name), mac}));
   }
 
   session.send_bytes(
@@ -338,13 +335,13 @@ bool registry::handle_chat(user_session& session, std::string_view message)
     return false;
   }
 
-  let pkt = chat_packet_s2c  //
-      {{{OPCODE_CHAT}, data_from<chat_message>(message)}, session.name};
+  let bytes = packet_bytes(chat_packet_s2c {
+      {{OPCODE_CHAT}, data_from<chat_message>(message)}, session.name});
 
   auto recipients = 0zu;
   for (let peer : session.group->players) {
     if (peer != &session) {
-      peer->send_bytes(packet_bytes(pkt));
+      peer->send_bytes(bytes);
       ++recipients;
     }
   }
@@ -368,12 +365,13 @@ void registry::broadcast_shutdown()
   shutdown_broadcasted_ = true;
 
   let msg = std::string_view(SERVER_SHUTDOWN_MESSAGE);
-  let pkt = chat_packet_s2c {{{OPCODE_CHAT}, data_from<chat_message>(msg)}, {}};
+  let bytes = packet_bytes(
+      chat_packet_s2c {{{OPCODE_CHAT}, data_from<chat_message>(msg)}, {}});
 
   for (let& [game_key, game] : games_) {
     for (let& [group_key, group] : game->groups) {
       for (let peer : group->players) {
-        peer->send_bytes(packet_bytes(pkt));
+        peer->send_bytes(bytes);
       }
     }
   }
