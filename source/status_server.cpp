@@ -109,6 +109,7 @@ std::vector<status_game> build_status_games(registry const& reg)
   games.reserve(users.size());
   game_index.reserve(users.size());
 
+  let groupless = "Groupless"sv;
   for (let& user : users) {
     let index_pair = game_index.try_emplace(user.product_code, games.size());
     if (index_pair.second) {
@@ -119,14 +120,13 @@ std::vector<status_game> build_status_games(registry const& reg)
     auto& game = games[index_pair.first->second];
     ++game.user_count;
 
-    if (user.group) {
-      let pair = game.group_index.try_emplace(*user.group, game.groups.size());
-      if (pair.second) {
-        game.groups.emplace_back(*user.group);
-      }
-
-      game.groups[pair.first->second].users.emplace_back(user.name, user.mac);
+    let group = user.group.value_or(groupless);
+    let pair = game.group_index.try_emplace(group, game.groups.size());
+    if (pair.second) {
+      game.groups.emplace_back(group);
     }
+
+    game.groups[pair.first->second].users.emplace_back(user.name, user.mac);
   }
 
   return games;
@@ -201,6 +201,8 @@ void build_status_json(std::string& out,
           out += R"(],"ptp_ports":[)"sv;
           append_port_array(out, ports->ptp);
           out.push_back(']');
+        } else {
+          out += R"(,"pdp_ports":[],"ptp_ports":[])"sv;
         }
 
         out.push_back('}');
