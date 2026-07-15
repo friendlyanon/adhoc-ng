@@ -75,9 +75,6 @@ public:
   std::vector<status_user> snapshot_for_status() const;
 
   std::string display_name_for(std::string_view code) const;
-  std::string display_name_for(product_code const& code) const;
-
-  std::size_t connection_count() const noexcept { return connection_count_; }
 
 private:
   void leave_group(user_session& session);

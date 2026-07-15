@@ -408,9 +408,4 @@ std::string registry::display_name_for(std::string_view code) const
   return db_->display_name_for(code);
 }
 
-std::string registry::display_name_for(product_code const& code) const
-{
-  return db_->display_name_for(code);
-}
-
 }  // namespace adhoc

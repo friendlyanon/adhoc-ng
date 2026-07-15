@@ -185,11 +185,6 @@ std::string product_db::display_name_for(string_view code) const
   return std::string(code);
 }
 
-std::string product_db::display_name_for(product_code const& code) const
-{
-  return display_name_for(product_code_str(code));
-}
-
 void product_db::record_unknown_product(product_code const& code)
 {
   let id = product_code_str(code);

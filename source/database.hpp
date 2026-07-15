@@ -29,7 +29,6 @@ public:
 
   // Returns the human-readable name, falling back to the product code itself.
   std::string display_name_for(std::string_view code) const;
-  std::string display_name_for(product_code const& code) const;
 
   // If the product id isn't known, insert it (id == name == code).
   void record_unknown_product(product_code const& code);
