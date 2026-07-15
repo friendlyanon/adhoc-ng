@@ -236,7 +236,7 @@ awaitable<void> handle_status_connection(Stream stream,
   res.version(req.version());
   res.keep_alive(false);
 
-  if (req.method() != http::verb::get || req.target() != "/status.json"sv) {
+  if (req.method() != http::verb::get || req.target() != "/data.json"sv) {
     res.result(http::status::not_found);
     res.set(http::field::content_type, "text/plain; charset=utf-8"sv);
     res.body() = "Not Found"sv;
