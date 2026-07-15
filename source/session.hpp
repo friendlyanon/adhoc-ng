@@ -5,7 +5,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -16,6 +15,7 @@
 #include <boost/asio/local/stream_protocol.hpp>
 #include <boost/asio/steady_timer.hpp>
 
+#include "deque.hpp"
 #include "protocol.hpp"
 
 namespace adhoc
@@ -87,7 +87,7 @@ private:
   std::uint8_t rx_[1024] {};
   std::size_t rxpos_ = 0;
 
-  std::deque<std::vector<std::byte>> write_queue_;
+  deque<std::vector<std::byte>> write_queue_;
   bool closed_ = false;
 };
 

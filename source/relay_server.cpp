@@ -6,7 +6,6 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <deque>
 #include <functional>
 #include <memory>
 #include <string>
@@ -27,6 +26,7 @@
 #include <boost/system/error_code.hpp>
 #include <fmt/format.h>
 
+#include "deque.hpp"
 #include "fwd_mov.hpp"
 #include "heterogeneous.hpp"
 
@@ -722,7 +722,7 @@ private:
   char to_mac_[mac_size] {};
   u16 to_port_ = 0;
 
-  std::deque<std::string> write_queue_;
+  deque<std::string> write_queue_;
   std::size_t queued_bytes_ = 0;
   bool established_ = false;
   bool closed_ = false;

@@ -4,6 +4,7 @@
   "dependencies": [
     "boost-asio",
     "boost-beast",
+    "boost-container",
     "boost-smart-ptr",
     "ctre",
     "fmt",
