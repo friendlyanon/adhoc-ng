@@ -325,6 +325,7 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
 
   auto db = adhoc::product_db {};
   auto reg = adhoc::registry {db};
+  auto relay_dir = adhoc::relay_directory {};
 
   let spawn_game = [&](auto& acceptor)
   {
@@ -336,14 +337,14 @@ int try_main(std::span<std::string_view> argv, FILE* err_out)
   let spawn_status = [&](auto& acceptor)
   {
     auto coro = [&]() -> awaitable<void>
-    { co_await adhoc::run_status_server(acceptor, reg); };
+    { co_await adhoc::run_status_server(acceptor, reg, relay_dir); };
     co_spawn(io_context, MOV(coro), detached);
   };
 
   let spawn_relay = [&](auto& acceptor)
   {
     auto coro = [&]() -> awaitable<void>
-    { co_await adhoc::run_relay_server(acceptor); };
+    { co_await adhoc::run_relay_server(acceptor, relay_dir); };
     co_spawn(io_context, MOV(coro), detached);
   };
 

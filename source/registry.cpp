@@ -392,7 +392,8 @@ std::vector<status_user> registry::snapshot_for_status() const
   for (let& [game_key, game] : games_) {
     let& code = game->code_str;
     for (let session : game->users) {
-      auto& u = out.emplace_back(nickname_str(session->name), code);
+      let mac = std::string_view {cstr(session->mac.data), ETHER_ADDR_LEN};
+      auto& u = out.emplace_back(nickname_str(session->name), mac, code);
       if (let group = session->group) {
         u.group = group->name;
       }

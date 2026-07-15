@@ -45,6 +45,43 @@ using u16 = std::uint16_t;
 namespace adhoc
 {
 
+void relay_directory::add(std::string_view mac,
+                          port_kind kind,
+                          std::uint16_t port)
+{
+  auto& set = by_mac_[std::string(mac)];
+  auto& ports = kind == port_kind::pdp ? set.pdp : set.ptp;
+  ports.push_back(port);
+}
+
+void relay_directory::remove(std::string_view mac,
+                             port_kind kind,
+                             std::uint16_t port)
+{
+  let it = by_mac_.find(mac);
+  if (it == by_mac_.end()) {
+    return;
+  }
+
+  auto& set = it->second;
+  auto& ports = kind == port_kind::pdp ? set.pdp : set.ptp;
+  if (let pit = std::find(ports.begin(), ports.end(), port); pit != ports.end())
+  {
+    ports.erase(pit);
+  }
+
+  if (set.pdp.empty() && set.ptp.empty()) {
+    by_mac_.erase(it);
+  }
+}
+
+relay_directory::port_set const* relay_directory::find(
+    std::string_view mac) const
+{
+  let it = by_mac_.find(mac);
+  return it == by_mac_.end() ? nullptr : &it->second;
+}
+
 namespace
 {
 
@@ -312,11 +349,13 @@ class relay_session : public std::enable_shared_from_this<relay_session<Socket>>
 public:
   relay_session(Socket socket,
                 std::string client_addr,
-                std::shared_ptr<relay_registry<Socket>> registry)
+                std::shared_ptr<relay_registry<Socket>> registry,
+                relay_directory& directory)
       : socket_(MOV(socket))
       , write_signal_(socket_.get_executor())
       , bond_signal_(socket_.get_executor())
       , registry_(MOV(registry))
+      , directory_(&directory)
       , client_addr_(MOV(client_addr))
       , create_time_(chrono::steady_clock::now())
   {
@@ -438,6 +477,7 @@ private:
     identifier_ = get_identifier();
     registry_->add(identifier_, self);
     registered_ = true;
+    directory_->add(mac_key(), directory_port_kind(), from_port_);
     fmt::println("created session {} for {}", identifier_, client_addr_);
   }
 
@@ -637,6 +677,10 @@ private:
     finished_ = true;
     close();
 
+    if (registered_) {
+      directory_->remove(mac_key(), directory_port_kind(), from_port_);
+    }
+
     if (registered_ && !superseded_) {
       fmt::println("removing {} of {}", identifier_, client_addr_);
       registry_->remove(identifier_, this);
@@ -708,10 +752,19 @@ private:
     return {};
   }
 
+  std::string_view mac_key() const { return {from_mac_, sizeof(from_mac_)}; }
+
+  relay_directory::port_kind directory_port_kind() const
+  {
+    return mode_ == aemu_session_mode::PDP ? relay_directory::port_kind::pdp
+                                           : relay_directory::port_kind::ptp;
+  }
+
   Socket socket_;
   boost::asio::steady_timer write_signal_;
   boost::asio::steady_timer bond_signal_;
   std::shared_ptr<relay_registry<Socket>> registry_;
+  relay_directory* directory_;
   std::string client_addr_;
   chrono::steady_clock::time_point create_time_;
 
@@ -732,7 +785,8 @@ private:
 };
 
 template<class Acceptor>
-awaitable<void> run_relay_acceptor(Acceptor& acceptor)
+awaitable<void> run_relay_acceptor(Acceptor& acceptor,
+                                   relay_directory& directory)
 {
   using socket_type = typename Acceptor::protocol_type::socket;
 
@@ -759,7 +813,7 @@ awaitable<void> run_relay_acceptor(Acceptor& acceptor)
     auto peer_addr = describe_peer(socket);
     registry->inc_active();
     std::make_shared<relay_session<socket_type>>(
-        MOV(socket), MOV(peer_addr), registry)
+        MOV(socket), MOV(peer_addr), registry, directory)
         ->start();
   }
 
@@ -768,15 +822,17 @@ awaitable<void> run_relay_acceptor(Acceptor& acceptor)
 
 }  // namespace
 
-awaitable<void> run_relay_server(tcp::acceptor& acceptor)
+awaitable<void> run_relay_server(tcp::acceptor& acceptor,
+                                 relay_directory& directory)
 {
-  co_await run_relay_acceptor(acceptor);
+  co_await run_relay_acceptor(acceptor, directory);
 }
 
 awaitable<void> run_relay_server(
-    boost::asio::local::stream_protocol::acceptor& acceptor)
+    boost::asio::local::stream_protocol::acceptor& acceptor,
+    relay_directory& directory)
 {
-  co_await run_relay_acceptor(acceptor);
+  co_await run_relay_acceptor(acceptor, directory);
 }
 
 }  // namespace adhoc

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -20,6 +22,7 @@
 #include "database.hpp"
 #include "fwd_mov.hpp"
 #include "registry.hpp"
+#include "relay_server.hpp"
 
 using namespace std::string_view_literals;
 
@@ -77,10 +80,16 @@ void append_json_escaped(std::string& out, std::string_view s)
   }
 }
 
+struct status_group_user
+{
+  std::string_view name;
+  std::string_view mac;
+};
+
 struct status_group
 {
   std::string_view name;
-  std::vector<std::string_view> users;
+  std::vector<status_group_user> users;
 };
 
 struct status_game
@@ -116,14 +125,34 @@ std::vector<status_game> build_status_games(registry const& reg)
         game.groups.emplace_back(*user.group);
       }
 
-      game.groups[pair.first->second].users.push_back(user.name);
+      game.groups[pair.first->second].users.emplace_back(user.name, user.mac);
     }
   }
 
   return games;
 }
 
-void build_status_json(std::string& out, registry const& reg)
+void append_port_array(std::string& out,
+                       std::vector<std::uint16_t> const& ports)
+{
+  auto sorted = ports;
+  std::sort(sorted.begin(), sorted.end());
+  sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+
+  let out_it = std::back_inserter(out);
+  auto first = true;
+  for (let port : sorted) {
+    if (!first) {
+      out.push_back(',');
+    }
+    first = false;
+    fmt::format_to(out_it, "{}", port);
+  }
+}
+
+void build_status_json(std::string& out,
+                       registry const& reg,
+                       relay_directory const& relay)
 {
   let games = build_status_games(reg);
   let out_it = std::back_inserter(out);
@@ -156,15 +185,25 @@ void build_status_json(std::string& out, registry const& reg)
           out_it, R"(","usercount":{},"users":[)", group.users.size());
 
       auto first_user = true;
-      for (let& user_name : group.users) {
+      for (let& user : group.users) {
         if (!first_user) {
           out.push_back(',');
         }
         first_user = false;
 
         out += R"({"name":")"sv;
-        append_json_escaped(out, user_name);
-        out += "\"}"sv;
+        append_json_escaped(out, user.name);
+        out.push_back('"');
+
+        if (let ports = relay.find(user.mac)) {
+          out += R"(,"pdp_ports":[)"sv;
+          append_port_array(out, ports->pdp);
+          out += R"(],"ptp_ports":[)"sv;
+          append_port_array(out, ports->ptp);
+          out.push_back(']');
+        }
+
+        out.push_back('}');
       }
 
       out += "]}"sv;
@@ -177,7 +216,9 @@ void build_status_json(std::string& out, registry const& reg)
 }
 
 template<class Stream>
-awaitable<void> handle_status_connection(Stream stream, registry const& reg)
+awaitable<void> handle_status_connection(Stream stream,
+                                         registry const& reg,
+                                         relay_directory const& relay)
 {
   auto ec = error_code {};
   auto buffer = beast::flat_buffer {};
@@ -193,14 +234,14 @@ awaitable<void> handle_status_connection(Stream stream, registry const& reg)
   res.version(req.version());
   res.keep_alive(false);
 
-  if (req.method() != http::verb::get || req.target() != "/"sv) {
+  if (req.method() != http::verb::get || req.target() != "/status.json"sv) {
     res.result(http::status::not_found);
     res.set(http::field::content_type, "text/plain; charset=utf-8"sv);
     res.body() = "Not Found"sv;
   } else {
     res.result(http::status::ok);
     res.set(http::field::content_type, "application/json; charset=utf-8"sv);
-    build_status_json(res.body(), reg);
+    build_status_json(res.body(), reg, relay);
   }
   res.prepare_payload();
 
@@ -216,7 +257,8 @@ awaitable<void> handle_status_connection(Stream stream, registry const& reg)
 
 template<class Acceptor>
 awaitable<void> run_status_server_generic(Acceptor& acceptor,
-                                          registry const& reg)
+                                          registry const& reg,
+                                          relay_directory const& relay)
 {
   using socket_type = typename Acceptor::protocol_type::socket;
   auto ec = error_code {};
@@ -231,23 +273,26 @@ awaitable<void> run_status_server_generic(Acceptor& acceptor,
       continue;
     }
 
-    auto handler = [s = MOV(socket), &reg]() mutable -> awaitable<void>
-    { co_await handle_status_connection<socket_type>(MOV(s), reg); };
+    auto handler = [s = MOV(socket), &reg, &relay]() mutable -> awaitable<void>
+    { co_await handle_status_connection<socket_type>(MOV(s), reg, relay); };
     co_spawn(acceptor.get_executor(), MOV(handler), detached);
   }
 }
 
 }  // namespace
 
-awaitable<void> run_status_server(tcp::acceptor& acceptor, registry const& reg)
+awaitable<void> run_status_server(tcp::acceptor& acceptor,
+                                  registry const& reg,
+                                  relay_directory const& relay)
 {
-  return run_status_server_generic(acceptor, reg);
+  return run_status_server_generic(acceptor, reg, relay);
 }
 
 awaitable<void> run_status_server(stream_protocol::acceptor& acceptor,
-                                  registry const& reg)
+                                  registry const& reg,
+                                  relay_directory const& relay)
 {
-  return run_status_server_generic(acceptor, reg);
+  return run_status_server_generic(acceptor, reg, relay);
 }
 
 }  // namespace adhoc

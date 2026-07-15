@@ -47,6 +47,7 @@ struct game_node
 struct status_user
 {
   std::string_view name;
+  std::string_view mac;
   std::string_view product_code;
   std::optional<std::string_view> group;
 };
