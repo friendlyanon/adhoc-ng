@@ -224,30 +224,43 @@ awaitable<void> handle_status_connection(Stream stream,
 {
   auto ec = error_code {};
   auto buffer = beast::flat_buffer {};
-  auto req = http::request<http::empty_body> {};
 
-  co_await http::async_read(
-      stream, buffer, req, redirect_error(use_awaitable, ec));
-  if (ec) {
-    co_return;
+  for (;;) {
+    auto req = http::request<http::empty_body> {};
+
+    ec = {};
+    co_await http::async_read(
+        stream, buffer, req, redirect_error(use_awaitable, ec));
+    if (ec) {
+      break;
+    }
+
+    auto res = http::response<http::string_body> {};
+    res.version(req.version());
+    let keep_alive = req.keep_alive();
+    res.keep_alive(keep_alive);
+
+    if (req.method() != http::verb::get || req.target() != "/data.json"sv) {
+      res.result(http::status::not_found);
+      res.set(http::field::content_type, "text/plain; charset=utf-8"sv);
+      res.body() = "Not Found"sv;
+    } else {
+      res.result(http::status::ok);
+      res.set(http::field::content_type, "application/json; charset=utf-8"sv);
+      build_status_json(res.body(), reg, relay);
+    }
+    res.prepare_payload();
+
+    ec = {};
+    co_await http::async_write(stream, res, redirect_error(use_awaitable, ec));
+    if (ec) {
+      break;
+    }
+
+    if (!keep_alive) {
+      break;
+    }
   }
-
-  auto res = http::response<http::string_body> {};
-  res.version(req.version());
-  res.keep_alive(false);
-
-  if (req.method() != http::verb::get || req.target() != "/data.json"sv) {
-    res.result(http::status::not_found);
-    res.set(http::field::content_type, "text/plain; charset=utf-8"sv);
-    res.body() = "Not Found"sv;
-  } else {
-    res.result(http::status::ok);
-    res.set(http::field::content_type, "application/json; charset=utf-8"sv);
-    build_status_json(res.body(), reg, relay);
-  }
-  res.prepare_payload();
-
-  co_await http::async_write(stream, res, redirect_error(use_awaitable, ec));
 
   if constexpr (std::is_same_v<Stream, tcp::socket>) {
     stream.shutdown(tcp::socket::shutdown_send, ec);
