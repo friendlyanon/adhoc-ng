@@ -33,7 +33,7 @@ public:
     std::vector<std::uint16_t> ptp;
   };
 
-  void add(std::string_view mac, port_kind kind, std::uint16_t port);
+  bool add(std::string_view mac, port_kind kind, std::uint16_t port);
   void remove(std::string_view mac, port_kind kind, std::uint16_t port);
 
   port_set const* find(std::string_view mac) const;

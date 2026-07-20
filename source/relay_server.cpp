@@ -30,6 +30,8 @@
 #include "fwd_mov.hpp"
 #include "heterogeneous.hpp"
 
+using namespace std::string_view_literals;
+
 namespace chrono = std::chrono;
 
 using boost::asio::awaitable;
@@ -45,18 +47,20 @@ using u16 = std::uint16_t;
 namespace adhoc
 {
 
-void relay_directory::add(std::string_view mac,
-                          port_kind kind,
-                          std::uint16_t port)
+bool relay_directory::add(std::string_view mac, port_kind kind, u16 port)
 {
   auto& set = by_mac_[std::string(mac)];
   auto& ports = kind == port_kind::pdp ? set.pdp : set.ptp;
-  ports.push_back(port);
+  let it = std::lower_bound(ports.begin(), ports.end(), port);
+  if (it != ports.end() && *it == port) {
+    return false;
+  }
+
+  ports.insert(it, port);
+  return true;
 }
 
-void relay_directory::remove(std::string_view mac,
-                             port_kind kind,
-                             std::uint16_t port)
+void relay_directory::remove(std::string_view mac, port_kind kind, u16 port)
 {
   let it = by_mac_.find(mac);
   if (it == by_mac_.end()) {
@@ -434,13 +438,19 @@ private:
       case AEMU_POSTOFFICE_INIT_PDP:
         mode_ = aemu_session_mode::PDP;
         set_endpoints(init.src_addr, init.sport, nullptr, 0);
-        register_self(self);
+        if (!register_self(self)) {
+          finish();
+          co_return;
+        }
         break;
 
       case AEMU_POSTOFFICE_INIT_PTP_LISTEN:
         mode_ = aemu_session_mode::PTP_LISTEN;
         set_endpoints(init.src_addr, init.sport, nullptr, 0);
-        register_self(self);
+        if (!register_self(self)) {
+          finish();
+          co_return;
+        }
         break;
 
       case AEMU_POSTOFFICE_INIT_PTP_CONNECT:
@@ -472,13 +482,23 @@ private:
     finish();
   }
 
-  void register_self(std::shared_ptr<relay_session>& self)
+  bool register_self(std::shared_ptr<relay_session>& self)
   {
     identifier_ = get_identifier();
     registry_->add(identifier_, self);
     registered_ = true;
-    directory_->add(mac_key(), directory_port_kind(), from_port_);
+    let kind = directory_port_kind();
+    if (!directory_->add(mac_key(), kind, from_port_)) {
+      let kind_str =
+          kind == relay_directory::port_kind::pdp ? "PDP"sv : "PTP"sv;
+      fmt::println("{} port {} already exists for MAC address {}",
+                   kind_str,
+                   from_port_,
+                   mac {from_mac_}.view());
+      return false;
+    }
     fmt::println("created session {} for {}", identifier_, client_addr_);
+    return true;
   }
 
   awaitable<bool> establish_connect(std::shared_ptr<relay_session>& self,
@@ -497,7 +517,9 @@ private:
     }
 
     established_ = false;
-    register_self(self);
+    if (!register_self(self)) {
+      co_return false;
+    }
 
     listen->queue_send(
         to_bytes(aemu_postoffice_ptp_connect {to_str(from_mac_), from_port_}));
@@ -528,7 +550,9 @@ private:
     }
 
     established_ = true;
-    register_self(self);
+    if (!register_self(self)) {
+      return false;
+    }
 
     using Pkt = aemu_postoffice_ptp_connect;
 

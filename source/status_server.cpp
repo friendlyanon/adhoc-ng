@@ -135,13 +135,9 @@ std::vector<status_game> build_status_games(registry const& reg)
 void append_port_array(std::string& out,
                        std::vector<std::uint16_t> const& ports)
 {
-  auto sorted = ports;
-  std::sort(sorted.begin(), sorted.end());
-  sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
-
   let out_it = std::back_inserter(out);
   auto first = true;
-  for (let port : sorted) {
+  for (let port : ports) {
     if (!first) {
       out.push_back(',');
     }
