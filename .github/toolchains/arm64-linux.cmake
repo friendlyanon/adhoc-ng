@@ -1,0 +1,5 @@
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR aarch64)
+set(path "${CMAKE_CURRENT_LIST_DIR}/../../aarch64-linux-musl/bin/aarch64-linux-musl-")
+get_filename_component(CMAKE_C_COMPILER "${path}gcc" ABSOLUTE CACHE)
+get_filename_component(CMAKE_CXX_COMPILER "${path}g++" ABSOLUTE CACHE)

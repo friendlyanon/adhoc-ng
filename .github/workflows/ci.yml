@@ -3,13 +3,15 @@ name: Continuous Integration
 on: push
 
 env:
-  VCPKG_COMMIT: "a0b1c8d3a477c1cb4813d8e127a56961707ca42b"
+  VCPKG_COMMIT: "a1cae005c39be7b18ba319fced856b68d7276271"
 
 jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-26.04, windows-2025]
+
+    if: github.ref_type != 'tag'
 
     runs-on: ${{ matrix.os }}
 
@@ -27,7 +29,9 @@ jobs:
 
     - name: Install vcpkg
       uses: friendlyanon/setup-vcpkg@v1
-      with: { committish: "${{ env.VCPKG_COMMIT }}" }
+      with:
+        cache-version: ${{ matrix.os }}
+        committish: ${{ env.VCPKG_COMMIT }}
 
     - name: Configure
       shell: pwsh

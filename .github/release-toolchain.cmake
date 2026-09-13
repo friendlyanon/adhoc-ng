@@ -1,0 +1,14 @@
+include("$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+
+add_compile_definitions(
+    BOOST_ASIO_DISABLE_SERIAL_PORT=1
+    BOOST_ASIO_DISABLE_SOURCE_LOCATION=1
+    BOOST_ASIO_DISABLE_BOOST_SOURCE_LOCATION=1
+    BOOST_ASIO_DISABLE_ERROR_LOCATION=1
+    BOOST_ASIO_DISABLE_BUFFER_DEBUGGING=1
+    BOOST_ASIO_DISABLE_SECURE_RTL=1
+)
+
+if(MSVC)
+  add_compile_options(/EHsc)
+endif()

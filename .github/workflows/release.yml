@@ -1,0 +1,90 @@
+name: Release
+
+on: { push: { tags: [r*] } }
+
+env:
+  VCPKG_COMMIT: "a1cae005c39be7b18ba319fced856b68d7276271"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        job: [1, 2, 3, 4, 5, 6, 7, 8]
+
+        include:
+        - { job: 1, os: windows-2025, arch: amd64, name: "Windows (x86_64)" }
+        - { job: 2, os: windows-2025, arch: amd64_x86, name: "Windows (x86)" }
+        - { job: 3, os: windows-2025, arch: amd64_arm64, name: "Windows (arm64)" }
+        - { job: 4, os: ubuntu-26.04, arch: amd64, name: "Linux (x86_64)" }
+        - { job: 5, os: ubuntu-26.04, arch: x86, name: "Linux (x86)" }
+        - { job: 6, os: ubuntu-26.04, arch: arm64, name: "Linux (arm64)" }
+        - { job: 7, os: ubuntu-26.04, arch: armv7l, name: "Linux (armv7l)" }
+        - { job: 8, os: ubuntu-26.04, arch: armv6, name: "Linux (armv6)" }
+
+    name: Build release for ${{ matrix.name }}
+
+    runs-on: ${{ matrix.os }}
+
+    defaults: { run: { shell: bash } }
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup MSVC
+      if: startsWith(matrix.os, 'windows-')
+      uses: eden-ci/msvc-dev-cmd@1bd71f95d6f3d1b2b3395b335cc63bcdc90cf223
+      with: { arch: "${{ matrix.arch }}" }
+
+    - name: Setup GCC
+      if: startsWith(matrix.os, 'ubuntu-')
+      run: .github/scripts/setup-gcc.sh 16 ${{ matrix.arch }}
+
+    - name: Install vcpkg
+      uses: friendlyanon/setup-vcpkg@v1
+      with:
+        cache-version: ${{ matrix.os }}-${{ matrix.arch }}
+        committish: ${{ env.VCPKG_COMMIT }}
+
+    - name: Configure
+      shell: pwsh
+      run: cmake "--preset=release-$("${{ matrix.os }}".split("-")[0])-${{ matrix.arch }}"
+
+    - name: Build
+      run: cmake --build build
+
+    - name: Install
+      run: cmake --install build --prefix prefix
+
+    - name: Package
+      id: package
+      run: .github/scripts/package.sh ${{ matrix.os }} ${{ matrix.arch }} ${{ github.ref_name }}
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.package.outputs.key }}
+        path: ${{ steps.package.outputs.key }}.*
+
+  release:
+    needs: build
+
+    permissions:
+      contents: write
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v8
+      with: { path: artifacts }
+
+    - name: Delete artifacts from storage
+      uses: GeekyEggo/delete-artifact@v6
+      with: { name: adhoc-ng-* }
+
+    - name: Release
+      uses: softprops/action-gh-release@v3
+      env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+      with:
+        body: Release ${{ github.ref_name }}
+        files: artifacts/*/adhoc-ng-*

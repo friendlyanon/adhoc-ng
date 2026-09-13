@@ -16,9 +16,7 @@
     {
       "name": "vcpkg-win64-static",
       "hidden": true,
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
-      }
+      "cacheVariables": { "VCPKG_TARGET_TRIPLET": "x64-windows-static-md" }
     },
     {
       "name": "ci-std",
@@ -60,19 +58,88 @@
     },
     {
       "name": "ci-build",
-      "inherits": ["ci-ninja", "vcpkg"],
+      "inherits": ["ci-ninja"],
       "binaryDir": "${sourceDir}/build",
       "hidden": true
     },
     {
+      "name": "ci-vcpkg",
+      "inherits": ["vcpkg", "ci-build"],
+      "hidden": true
+    },
+    {
       "name": "ci-ubuntu",
-      "inherits": ["flags-gcc-clang", "ci-build"]
+      "inherits": ["flags-gcc-clang", "ci-vcpkg"]
     },
     {
       "name": "ci-windows",
-      "inherits": ["flags-msvc", "ci-build", "vcpkg-win64-static"],
+      "inherits": ["flags-msvc", "ci-vcpkg", "vcpkg-win64-static"],
       "cacheVariables": {
         "CMAKE_CXX_FLAGS_RELEASE": "/O2 /Ob2 /DNDEBUG /wd4702"
+      }
+    },
+    {
+      "name": "release-base",
+      "hidden": true,
+      "inherits": ["ci-build"],
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/.github/release-toolchain.cmake",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/.github/triplets"
+      }
+    },
+    {
+      "name": "release-windows-amd64",
+      "inherits": ["release-base"],
+      "cacheVariables": { "VCPKG_TARGET_TRIPLET": "amd64-windows-static-md-release" }
+    },
+    {
+      "name": "release-windows-amd64_x86",
+      "inherits": ["release-base"],
+      "cacheVariables": { "VCPKG_TARGET_TRIPLET": "x86-windows-static-md-release" }
+    },
+    {
+      "name": "release-windows-amd64_arm64",
+      "inherits": ["release-base"],
+      "cacheVariables": { "VCPKG_TARGET_TRIPLET": "arm64-windows-static-md-release" }
+    },
+    {
+      "name": "release-ubuntu-amd64",
+      "inherits": ["release-base"],
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "amd64-linux-static-release",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/.github/toolchains/amd64-linux.cmake"
+      }
+    },
+    {
+      "name": "release-ubuntu-x86",
+      "inherits": ["release-base"],
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x86-linux-static-release",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/.github/toolchains/x86-linux.cmake"
+      }
+    },
+    {
+      "name": "release-ubuntu-arm64",
+      "inherits": ["release-base"],
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-linux-static-release",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/.github/toolchains/arm64-linux.cmake"
+      }
+    },
+    {
+      "name": "release-ubuntu-armv7l",
+      "inherits": ["release-base"],
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "armv7l-linux-static-release",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/.github/toolchains/armv7l-linux.cmake"
+      }
+    },
+    {
+      "name": "release-ubuntu-armv6",
+      "inherits": ["release-base"],
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "armv6-linux-static-release",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/.github/toolchains/armv6-linux.cmake"
       }
     }
   ]

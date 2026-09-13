@@ -1,6 +1,7 @@
 .idea/
 .vs/
 .vscode/
+*-linux-musl/
 build/
 cmake-build-*/
 prefix/
